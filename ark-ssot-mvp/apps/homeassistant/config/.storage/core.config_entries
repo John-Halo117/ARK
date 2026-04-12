@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "minor_version": 5,
+  "key": "core.config_entries",
+  "data": {
+    "entries": [
+      {"created_at":"2026-04-11T02:30:34.438552+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"sun","entry_id":"01KNX60WP6C1GEQK3H8E4290V7","minor_version":1,"modified_at":"2026-04-11T02:30:34.438554+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"import","subentries":[],"title":"Sun","unique_id":null,"version":1},
+      {"created_at":"2026-04-11T02:30:34.650233+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"go2rtc","entry_id":"01KNX60WWT0NNS4GPZ9HE7PFWE","minor_version":1,"modified_at":"2026-04-11T02:30:34.650236+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"system","subentries":[],"title":"go2rtc","unique_id":null,"version":1},
+      {"created_at":"2026-04-11T02:30:34.660726+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"backup","entry_id":"01KNX60WX4X5NJ7019G378ENWH","minor_version":1,"modified_at":"2026-04-11T02:30:34.660728+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"system","subentries":[],"title":"Backup","unique_id":null,"version":1},
+      {"created_at":"2026-04-11T04:55:34.217522+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"shopping_list","entry_id":"01KNXEACJ9690BABW9ADAVJH33","minor_version":1,"modified_at":"2026-04-11T04:55:34.217525+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"onboarding","subentries":[],"title":"Shopping list","unique_id":"shopping_list","version":1},
+      {"created_at":"2026-04-11T04:55:34.223928+00:00","data":{"language":"en","tld":"com"},"disabled_by":null,"discovery_keys":{},"domain":"google_translate","entry_id":"01KNXEACJF09GFDYNX13H9NXBY","minor_version":1,"modified_at":"2026-04-11T04:55:34.223930+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"onboarding","subentries":[],"title":"Google Translate text-to-speech","unique_id":null,"version":1},
+      {"created_at":"2026-04-11T04:55:34.353652+00:00","data":{},"disabled_by":null,"discovery_keys":{},"domain":"radio_browser","entry_id":"01KNXEACPH51NS5T3A0AHJXM6B","minor_version":1,"modified_at":"2026-04-11T04:55:34.353654+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"onboarding","subentries":[],"title":"Radio Browser","unique_id":null,"version":1},
+      {"created_at":"2026-04-11T04:55:34.364465+00:00","data":{"track_home":true},"disabled_by":null,"discovery_keys":{},"domain":"met","entry_id":"01KNXEACPWFD9Z61ACXKQ9VKPP","minor_version":1,"modified_at":"2026-04-11T04:55:34.364467+00:00","options":{},"pref_disable_new_entities":false,"pref_disable_polling":false,"source":"onboarding","subentries":[],"title":"Home","unique_id":null,"version":1}
+    ]
+  }
+}

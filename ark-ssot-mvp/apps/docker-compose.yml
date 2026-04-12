@@ -1,0 +1,195 @@
+networks:
+  unifi-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+
+volumes:
+  jellyfin-config:
+    driver: local
+  jellyfin-transcode:
+    driver: local
+  homeassistant-config:
+    driver: local
+  unifi-config:
+    driver: local
+  unifi-db:
+    driver: local
+  unifi-protect-config:
+    driver: local
+  unifi-protect-logs:
+    driver: local
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2024.4
+    container_name: ark-homeassistant
+    restart: on-failure:5
+    env_file:
+      - .env
+    environment:
+      TZ: ${ARK_TIMEZONE}
+      PYTHONUNBUFFERED: 1
+    ports:
+      - "${ARK_HOMEASSISTANT_PORT}:8123"
+    volumes:
+      - homeassistant-config:/config
+      - ${ARK_MEDIA_DIR}:/media:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  jellyfin:
+    image: lscr.io/linuxserver/jellyfin:10.8.13
+    container_name: ark-jellyfin
+    restart: on-failure:5
+    env_file:
+      - .env
+    environment:
+      TZ: ${ARK_TIMEZONE}
+      PUID: ${ARK_PUID}
+      PGID: ${ARK_PGID}
+      JELLYFIN_PublishedServerUrl: ${JELLYFIN_BASE_URL}
+      JELLYFIN_FFmpeg_probesize: 100000
+      JELLYFIN_FFmpeg_analyzeduration: 100000
+    ports:
+      - "${ARK_JELLYFIN_PORT}:8096"
+      - "${ARK_JELLYFIN_HTTPS_PORT}:8920"
+    volumes:
+      - jellyfin-config:/config
+      - jellyfin-transcode:/transcode
+      - ${ARK_MEDIA_DIR}:/media:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  unifi-db:
+    image: mongo:7.0-jammy
+    container_name: ark-unifi-db
+    restart: on-failure:5
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${UNIFI_MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${UNIFI_MONGO_ROOT_PASSWORD}
+      MONGO_USER: ${UNIFI_MONGO_APP_USER}
+      MONGO_PASS: ${UNIFI_MONGO_APP_PASSWORD}
+      MONGO_DBNAME: ${UNIFI_MONGO_DB}
+      MONGO_AUTHSOURCE: admin
+    volumes:
+      - unifi-db:/data/db
+      - ./unifi/init-mongo.sh:/docker-entrypoint-initdb.d/init-mongo.sh:ro
+    command:
+      - mongod
+      - --auth
+      - --journal
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1.5G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+    networks:
+      - unifi-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  unifi:
+    image: lscr.io/linuxserver/unifi-network-application:7.5.187
+    container_name: ark-unifi
+    restart: on-failure:5
+    env_file:
+      - .env
+    depends_on:
+      unifi-db:
+        condition: service_healthy
+    environment:
+      PUID: ${ARK_PUID}
+      PGID: ${ARK_PGID}
+      TZ: ${ARK_TIMEZONE}
+      MONGO_USER: ${UNIFI_MONGO_APP_USER}
+      MONGO_PASS: ${UNIFI_MONGO_APP_PASSWORD}
+      MONGO_HOST: unifi-db
+      MONGO_PORT: 27017
+      MONGO_DBNAME: ${UNIFI_MONGO_DB}
+      MONGO_AUTHSOURCE: admin
+      MEM_LIMIT: 1024
+      MEM_STARTUP: 1024
+    ports:
+      - "127.0.0.1:${ARK_UNIFI_HTTPS_PORT}:8443"
+      - "127.0.0.1:${ARK_UNIFI_INFORM_PORT}:8080"
+      - "127.0.0.1:${ARK_UNIFI_PORTAL_HTTPS_PORT}:8843"
+      - "127.0.0.1:${ARK_UNIFI_PORTAL_HTTP_PORT}:8880"
+      - "127.0.0.1:${ARK_UNIFI_SPEEDTEST_PORT}:6789"
+      - "${ARK_UNIFI_STUN_PORT}:3478/udp"
+      - "${ARK_UNIFI_DISCOVERY_PORT}:10001/udp"
+      - "${ARK_UNIFI_L2_PORT}:1900/udp"
+      - "${ARK_UNIFI_SYSLOG_PORT}:5514/udp"
+    volumes:
+      - unifi-config:/config
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1.5G
+    networks:
+      - unifi-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:8443/api/system/information"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    stop_grace_period: 30s

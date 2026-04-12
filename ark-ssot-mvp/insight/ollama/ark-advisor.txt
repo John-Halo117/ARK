@@ -1,0 +1,3 @@
+- Convert the input payload into one JSON object with exactly these keys: `signal_key`, `entity_id`, `value`, `value_kind`, `unit`, and `metadata`, using only facts present in the payload.
+- If any core field is uncertain, set `signal_key` to `unknown.raw`, keep the most faithful raw value you can extract, and record the uncertainty in `metadata.classifier_notes`.
+- Return JSON only with no markdown, no prose, and no keys outside the required object.

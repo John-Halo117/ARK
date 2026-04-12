@@ -1,0 +1,16 @@
+{
+  "category": "Subtitles",
+  "changelog": "- 5 requests per second, not 5 requests per 5 second (#175) @crobibero\n- Add bad subtitle handling (#165) @MBR-0001",
+  "description": "Download subtitles from the internet to use with your media files. (Requires configuration)",
+  "guid": "4b9ed42f-5185-48b5-9803-6ff2989014c4",
+  "name": "Open Subtitles",
+  "overview": "Download subtitles for your media",
+  "owner": "jellyfin",
+  "targetAbi": "10.11.0.0",
+  "timestamp": "2025-10-26T17:50:03.0000000Z",
+  "version": "23.0.0.0",
+  "status": "Active",
+  "autoUpdate": true,
+  "imagePath": "/config/data/plugins/Open Subtitles_23.0.0.0/jellyfin-plugin-opensubtitles.png",
+  "assemblies": []
+}

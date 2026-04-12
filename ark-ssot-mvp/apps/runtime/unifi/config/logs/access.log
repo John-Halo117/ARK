@@ -1,0 +1,318 @@
+[2026-04-10T19:26:50,635-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 51ms   /status
+[2026-04-10T19:26:51,689-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T19:26:52,722-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T19:26:53,763-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T19:26:54,799-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T19:26:55,831-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T19:26:56,876-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T19:26:57,908-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T19:26:58,938-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T19:26:59,977-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 13ms   /status
+[2026-04-10T19:48:40,060-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 85ms   /status
+[2026-04-10T19:48:41,104-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T19:48:42,166-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 1ms    /status
+[2026-04-10T19:48:43,219-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T19:48:44,263-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T19:48:45,297-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T19:48:46,332-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T19:48:47,368-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T19:48:48,401-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 1ms    /status
+[2026-04-10T19:48:49,432-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T19:48:50,471-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 12ms   /status
+[2026-04-10T20:55:01,167-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 46ms   /status
+[2026-04-10T20:55:02,216-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 1ms    /status
+[2026-04-10T20:55:03,256-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T20:55:04,294-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T20:55:05,327-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T20:55:06,361-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T20:55:07,403-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T20:55:08,435-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 1ms    /status
+[2026-04-10T20:55:09,462-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T20:55:10,502-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 13ms   /status
+[2026-04-10T21:30:00,089-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 53ms   /status
+[2026-04-10T21:30:01,140-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T21:30:02,181-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T21:30:03,220-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T21:30:04,254-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 1ms    /status
+[2026-04-10T21:30:05,291-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 0ms    /status
+[2026-04-10T21:30:06,335-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 0ms    /status
+[2026-04-10T21:30:07,368-07:00] [0:0:0:0:0:0:0:1 -> webapi-2  ] GET   200 1ms    /status
+[2026-04-10T21:30:08,409-07:00] [0:0:0:0:0:0:0:1 -> webapi-1  ] GET   200 12ms   /status
+[2026-04-10T22:20:29,969-07:00] [     172.19.0.1 -> webapi-1  ] GET   302 12ms   /
+[2026-04-10T22:20:29,991-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 17ms   /setup/
+[2026-04-10T22:20:30,043-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 6ms    /setup/static/js/main.7997cf149daff31b117c.js
+[2026-04-10T22:20:30,101-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 84ms   /setup/static/js/vendor.7997cf149daff31b117c.js
+[2026-04-10T22:20:30,335-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 6ms    /api/logout
+[2026-04-10T22:20:30,515-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 13ms   /api/stat/sysinfo
+[2026-04-10T22:20:30,611-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 4ms    /setup/static/images/c3686a3d067479d40dce0a214f8f9418.png
+[2026-04-10T22:20:30,612-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 4ms    /api/stat/sdn
+[2026-04-10T22:20:30,642-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 4ms    /api/stat/ccode
+[2026-04-10T22:20:30,704-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 6ms    /api/stat/device
+[2026-04-10T22:20:30,713-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /setup/favicon.png
+[2026-04-10T22:20:30,813-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 87ms   /v2/api/site/default/apgroups
+[2026-04-10T22:20:30,853-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 27ms   /v2/api/timezones
+[2026-04-10T22:20:52,494-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 5ms    /setup/favicon.png
+[2026-04-10T22:21:56,295-07:00] [     172.19.0.1 -> webapi-2  ] POST  400 395ms  /api/cmd/cloudaccess
+[2026-04-10T22:22:56,800-07:00] [     172.19.0.1 -> webapi-2  ] POST  400 1291ms /api/cmd/cloudaccess
+[2026-04-10T22:22:56,838-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 1ms    /setup/static/images/92a119e64d41fc9f4c4930556decbdf0.png
+[2026-04-10T22:23:07,150-07:00] [     172.19.0.1 -> webapi-1  ] POST  202 10319ms /api/cmd/cloudaccess
+[2026-04-10T22:23:13,493-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 6338ms /api/cmd/cloudaccess
+[2026-04-10T22:23:13,501-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /api/stat/sdn
+[2026-04-10T22:23:13,601-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 97ms   /api/cmd/sitemgr
+[2026-04-10T22:23:13,617-07:00] [     172.19.0.1 -> webapi-1  ] POST  200 12ms   /api/set/setting/super_identity
+[2026-04-10T22:23:13,627-07:00] [     172.19.0.1 -> webapi-3  ] POST  200 9ms    /api/set/setting/locale
+[2026-04-10T22:23:13,652-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 47ms   /api/set/setting/country
+[2026-04-10T22:23:13,704-07:00] [     172.19.0.1 -> webapi-1  ] POST  200 45ms   /api/set/setting/super_mgmt
+[2026-04-10T22:23:13,764-07:00] [     172.19.0.1 -> webapi-3  ] POST  200 56ms   /api/set/setting/mgmt
+[2026-04-10T22:23:13,815-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 46ms   /api/set/setting/super_sdn
+[2026-04-10T22:23:16,564-07:00] [     172.19.0.1 -> webapi-1  ] POST  200 2745ms /api/cmd/cloudaccess
+[2026-04-10T22:23:16,609-07:00] [     172.19.0.1 -> webapi-3  ] POST  200 40ms   /api/cmd/system
+[2026-04-10T22:23:16,835-07:00] [     172.19.0.1 -> webapi-2  ] GET   302 0ms    /setup/configure/credentials
+[2026-04-10T22:23:16,843-07:00] [     172.19.0.1 -> webapi-1  ] GET   302 4ms    /manage
+[2026-04-10T22:23:16,848-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/site/default
+[2026-04-10T22:23:16,879-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 4ms    /manage/angular/gf41cf28e3/js/index.js
+[2026-04-10T22:23:17,018-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 5ms    /api/self
+[2026-04-10T22:23:17,149-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 7ms    /v2/api/features/LEGACY_UI_SUPPORTED/exists
+[2026-04-10T22:23:17,232-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 3ms    /manage/angular/gf41cf28e3/images/favicons/favicon-32.png?v=2
+[2026-04-10T22:23:17,306-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 84ms   /manage/react/js/swai.e751c284f0e2175714c4.js
+[2026-04-10T22:23:17,804-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 30ms   /v2/api/info?preferred_site_name=default
+[2026-04-10T22:23:17,822-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 3ms    /manage/react/js/authenticated-app-config.b874e283dc0554ff58e5.js
+[2026-04-10T22:23:17,822-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 3ms    /manage/react/js/toast-provider.612e721fb0124ef08c78.js
+[2026-04-10T22:23:17,826-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 2ms    /manage/react/js/network-server-styles.e743f58c1d1b2973d0ed.js
+[2026-04-10T22:23:17,828-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 9ms    /v2/api/site/default/models
+[2026-04-10T22:23:17,845-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /manage/react/js/31609.83bceef416720ce3a5aa.js
+[2026-04-10T22:23:17,846-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 2ms    /manage/react/js/web-socket-manager.a1fc10ccfcd1a47e84d2.js
+[2026-04-10T22:23:17,851-07:00] [     172.19.0.1 -> webapi-4  ] GET   206 11ms   /manage/react/images/networkServerUpgrade/unifi_os_server.mp4
+[2026-04-10T22:23:17,859-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/27853.21ba3e45a4197adb9e61.js
+[2026-04-10T22:23:17,859-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /manage/react/js/default-toasts.4baee1f5e45b8875fc75.js
+[2026-04-10T22:23:17,861-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 2ms    /manage/react/js/64023.df6737892c99d7044f29.js
+[2026-04-10T22:23:17,866-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /manage/react/js/17147.92dee9908ad31bd68e48.js
+[2026-04-10T22:23:17,866-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /manage/react/js/51272.ebbe17005160cb4fa69f.js
+[2026-04-10T22:23:17,867-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 2ms    /manage/react/js/18195.ea13796f73e62145d24b.js
+[2026-04-10T22:23:17,870-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /manage/react/js/93841.820cdb160f764c742d14.js
+[2026-04-10T22:23:17,872-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/79106.3afe4efc958e425d799c.js
+[2026-04-10T22:23:17,873-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /manage/react/js/33606.c0a2983d54eb68e9c87a.js
+[2026-04-10T22:23:17,873-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 1ms    /manage/react/js/38877.6a92247a745f766c1445.js
+[2026-04-10T22:23:17,880-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 3ms    /manage/react/js/31773.4b6a905cd936714f3264.js
+[2026-04-10T22:23:17,879-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 3ms    /manage/react/js/338.7a3d3f7a90d1eb27d32c.js
+[2026-04-10T22:23:17,879-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 3ms    /manage/react/js/43375.00b4995ea1d47b08903a.js
+[2026-04-10T22:23:17,885-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/13783.816c8706e3dfb386515a.js
+[2026-04-10T22:23:17,885-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/19663.31e04be242cc219b6bb6.js
+[2026-04-10T22:23:17,886-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 2ms    /manage/react/js/91870.871ab830c226071b8797.js
+[2026-04-10T22:23:17,889-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/2309.3e187045c09cb190e7e3.js
+[2026-04-10T22:23:17,891-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 4ms    /manage/react/js/95342.6f7c0b0340d8f0b1e505.js
+[2026-04-10T22:23:17,892-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/77253.8ad6ced9515d92ec5a71.js
+[2026-04-10T22:23:17,894-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /manage/react/js/43811.a0606bf28469db7a80bb.js
+[2026-04-10T22:23:17,895-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/90033.1a676846dcb01ce56fce.js
+[2026-04-10T22:23:17,898-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 4ms    /manage/react/js/7407.eca22de77e78c742e4b3.js
+[2026-04-10T22:23:17,900-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 8ms    /manage/react/js/9857.8d9ba2dd842e6efeb05f.js
+[2026-04-10T22:23:17,901-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 5ms    /manage/react/js/38212.bad0e8361c08388dbeba.js
+[2026-04-10T22:23:17,901-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 2ms    /manage/react/js/controller-warnings.df1d6a6a17e8e4c09e54.js
+[2026-04-10T22:23:17,912-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 15ms   /manage/react/js/react-app-wrapper.c194a0ff428222d685e1.js
+[2026-04-10T22:23:18,017-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 2ms    /manage/react/js/deprecated-redirector.30076878ab4f664e19f0.js
+[2026-04-10T22:23:18,017-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /manage/react/js/68350.f31704b66371c863605b.js
+[2026-04-10T22:23:18,017-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/network-server-header.ff435536b1647777b610.js
+[2026-04-10T22:23:18,017-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 2ms    /manage/react/js/side-nav.9ede2bdd0bb998c6441d.js
+[2026-04-10T22:23:18,018-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 4ms    /manage/react/js/43020.74ed190771cb6c4befab.js
+[2026-04-10T22:23:18,024-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 1ms    /manage/react/js/73740.fe6055c59493dd6844a9.js
+[2026-04-10T22:23:18,024-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/modal-root.3a4b5228030a5ea9214f.js
+[2026-04-10T22:23:18,024-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/40124.a2ad37008deafc6e6f1e.js
+[2026-04-10T22:23:18,024-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/91912.bf1bb8b33d49604d4e2f.js
+[2026-04-10T22:23:18,024-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 2ms    /manage/react/js/89195.08efa4263ef9588fa14b.js
+[2026-04-10T22:23:18,029-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 1ms    /manage/react/js/swai-etpro-adapter-injector.c2b63ad43b943da73bf1.js
+[2026-04-10T22:23:18,029-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 1ms    /manage/react/js/property-panel-root.7c445961718cbbbc09cd.js
+[2026-04-10T22:23:18,029-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/swai-routes-injector.7765dea8ee5840c46057.js
+[2026-04-10T22:23:18,029-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/prefetcher.256ba215c3486390a20e.js
+[2026-04-10T22:23:18,029-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/device-adoption-redirector.fb0291b56d0932aaf56c.js
+[2026-04-10T22:23:18,035-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/search-tag-initiator.a4e951e097010d92b3ee.js
+[2026-04-10T22:23:18,035-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /manage/react/js/swai-wan-magic-adapter-injector.f2f86c43bde46026466f.js
+[2026-04-10T22:23:18,036-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /manage/react/js/swai-sso-user-settings-adapter-injector.767ae9c6b7d5825392c6.js
+[2026-04-10T22:23:18,123-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 2ms    /api/s/default/stat/health
+[2026-04-10T22:23:18,124-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 1ms    /manage/react/js/87896.5cb32fbc7508eaca4cf2.js
+[2026-04-10T22:23:18,221-07:00] [     172.19.0.1 -> webapi-1  ] GET   101 29ms   /wss/s/default/events?clients=v2&next_ai_notifications=true
+[2026-04-10T22:23:18,256-07:00] [     172.19.0.1 -> webapi-2  ] GET   101 1ms    /wss/s/super/events?clients=v2
+[2026-04-10T22:23:18,331-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 173ms  /v2/api/site/default/aggregated-dashboard?historySeconds=86400
+[2026-04-10T22:23:18,416-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/76308.f0e94873254e1e7d1d85.js
+[2026-04-10T22:23:18,435-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 6ms    /api/s/default/get/setting
+[2026-04-10T22:23:18,445-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 11ms   /v2/api/system/event/SETUP_COMPLETED/first
+[2026-04-10T22:23:18,473-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 45ms   /v2/api/site/default/described-features?includeSystemFeatures=true
+[2026-04-10T22:23:18,496-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 4ms    /manage/react/data/locales/en/logMessages.9cc40042464f2551e11216fca7f28857.json
+[2026-04-10T22:23:18,528-07:00] [     172.19.0.1 -> webapi-2  ] POST  200 96ms   /v2/api/site/default/system-log/critical
+[2026-04-10T22:23:20,468-07:00] [     172.19.0.1 -> webapi-1  ] PUT   200 7ms    /api/self
+[2026-04-10T22:23:25,497-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 3ms    /api/s/default/stat/device
+[2026-04-10T22:23:26,785-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 25ms   /v2/api/site/default/device?separateUnmanaged=true&includeTrafficUsage=true
+[2026-04-10T22:23:28,052-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 9ms    /v2/api/site/default/clients/active?includeTrafficUsage=true&includeUnifiDevices=true
+[2026-04-10T22:23:29,345-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 36ms   /v2/api/site/default/clients/history?onlyNonBlocked=true&includeUnifiDevices=true&withinHours=24
+[2026-04-10T22:23:29,354-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 46ms   /v2/api/site/default/clients/history?onlyNonBlocked=true&includeUnifiDevices=true&withinHours=24
+[2026-04-10T22:23:30,606-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 2ms    /v2/api/site/default/clients/history?onlyNonBlocked=true&includeUnifiDevices=true&withinHours=0
+[2026-04-10T22:23:30,611-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 7ms    /v2/api/site/default/clients/history?onlyNonBlocked=true&includeUnifiDevices=true&withinHours=0
+[2026-04-10T22:23:31,867-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /v2/api/site/default/clients/history?onlyBlocked=true&withinHours=0
+[2026-04-10T22:23:31,872-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 7ms    /v2/api/site/default/clients/history?onlyBlocked=true&withinHours=0
+[2026-04-10T22:23:33,132-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 4ms    /v2/api/site/default/hotspot/info
+[2026-04-10T22:23:34,393-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 3ms    /v2/api/site/default/apgroups
+[2026-04-10T22:23:35,656-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 7ms    /v2/api/site/default/radius/users
+[2026-04-10T22:23:36,959-07:00] [     172.19.0.1 -> webapi-6  ] POST  200 47ms   /api/s/default/cmd/sitemgr
+[2026-04-10T22:23:38,226-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 8ms    /api/s/default/stat/widget/warnings
+[2026-04-10T22:23:39,484-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /api/s/default/stat/ccode
+[2026-04-10T22:23:40,740-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 0ms    /api/s/default/stat/device-basic
+[2026-04-10T22:23:42,002-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 5ms    /api/s/default/rest/dhcpoption
+[2026-04-10T22:23:43,264-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 4ms    /api/s/default/rest/dpiapp
+[2026-04-10T22:23:44,522-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 3ms    /api/s/default/rest/dpigroup
+[2026-04-10T22:23:45,783-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 4ms    /api/s/default/rest/dynamicdns
+[2026-04-10T22:23:47,612-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 572ms  /v2/api/fingerprint_devices/0
+[2026-04-10T22:23:49,074-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 4ms    /api/s/default/rest/firewallgroup
+[2026-04-10T22:23:51,074-07:00] [     172.19.0.1 -> webapi-2  ] GET   200 4ms    /api/s/default/rest/firewallrule
+[2026-04-10T22:23:53,068-07:00] [     172.19.0.1 -> webapi-1  ] GET   200 4ms    /api/stat/s/default/hotspotpackages
+[2026-04-10T22:23:55,079-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 9ms    /v2/api/site/default/lan/enriched-configuration
+[2026-04-10T22:23:57,069-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /api/s/default/rest/networkconf
+[2026-04-10T22:24:24,310-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 5ms    /api/s/default/rest/portconf
+[2026-04-10T22:24:25,573-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 3ms    /api/s/default/rest/portforward
+[2026-04-10T22:24:26,834-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 3ms    /api/s/default/rest/radiusprofile
+[2026-04-10T22:24:28,104-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 4ms    /api/s/default/rest/routing
+[2026-04-10T22:24:28,905-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/48273.88ab3f407e8fa1754a44.js
+[2026-04-10T22:24:28,913-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 4ms    /manage/react/data/locales/en/devices.cebbdf120b4d1488a482532a7538f8db.json
+[2026-04-10T22:24:29,373-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /api/s/default/rest/scheduletask?action=upgrade
+[2026-04-10T22:24:30,505-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/82935.9384fdec7d64121837bd.js
+[2026-04-10T22:24:30,508-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/94306.1d67143d38fb20e2f0e9.js
+[2026-04-10T22:24:30,511-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /manage/react/data/locales/en/topology.fb05ca62860f2bf0fc000a296870f0c0.json
+[2026-04-10T22:24:30,514-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/data/locales/en/clients.669644b68a776db317579bca36f14f68.json
+[2026-04-10T22:24:30,967-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 3ms    /manage/react/js/46880.f99d6de890c2e356e314.js
+[2026-04-10T22:24:30,970-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /manage/react/js/83770.cc1d3462fafd1ec7e448.js
+[2026-04-10T22:24:30,974-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/23223.3db3dd8b392ba61cb290.js
+[2026-04-10T22:24:30,977-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /manage/react/js/48446.9f44cf2d513e18936b43.js
+[2026-04-10T22:24:30,982-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 3ms    /manage/react/js/topology.a6f51a0efc6d9e7fe9b5.js
+[2026-04-10T22:24:31,015-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 5ms    /v2/api/site/default/mclag-groups
+[2026-04-10T22:24:31,020-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 3ms    /v2/api/site/default/wan/enriched-configuration
+[2026-04-10T22:24:31,026-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 19ms   /v2/api/site/default/topology
+[2026-04-10T22:24:31,032-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 10ms   /v2/api/site/default/wan/networkgroups?uptime=true
+[2026-04-10T22:24:31,032-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 2ms    /api/s/default/rest/wlanconf
+[2026-04-10T22:24:31,040-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 5ms    /v2/api/site/default/topology
+[2026-04-10T22:24:31,046-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/50724.e6eea3342ed054c29e14.js
+[2026-04-10T22:24:31,050-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 9ms    /v2/api/site/default/stacking
+[2026-04-10T22:24:31,057-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/data/locales/en/unifiDevices.dc9ac6b3e87bec9f4b28e7cab232e946.json
+[2026-04-10T22:24:31,368-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 333ms  /v2/api/fingerprint_devices/1
+[2026-04-10T22:24:31,929-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 23ms   /api/s/default/stat/widget/subnet-suggest
+[2026-04-10T22:24:33,205-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 5ms    /v2/api/timezones
+[2026-04-10T22:24:34,478-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 5ms    /v2/api/site/default/trafficrules
+[2026-04-10T22:24:35,761-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /api/s/default/rest/usergroup
+[2026-04-10T22:24:38,565-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/js/43615.29025cce4c1a0a2a80f8.js
+[2026-04-10T22:24:38,565-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/94055.ea6ef1f12235455cb273.js
+[2026-04-10T22:24:38,565-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 1ms    /manage/react/js/76985.b911d114264079498b40.js
+[2026-04-10T22:24:38,565-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/74736.15d7b99f42e93c4d0c63.js
+[2026-04-10T22:24:38,573-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /manage/react/data/locales/en/flows.e6a03bd456028b68fa51a103ebe33b44.json
+[2026-04-10T22:24:38,574-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /manage/react/data/locales/en/activity.292d68b78b98a8cf6b4e27cf8aaf9011.json
+[2026-04-10T22:24:38,574-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/data/locales/en/analyzer.3487ee8a116706f036db784c7d66c2ef.json
+[2026-04-10T22:24:38,574-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/data/locales/en/hotspot.1c2b8f670f57eaeaf85b3273ed2895f0.json
+[2026-04-10T22:24:38,646-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 1ms    /manage/react/js/59794.88bfcf12b2b23f23d1b0.js
+[2026-04-10T22:24:38,653-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/data/locales/en/admins.28276680f174a853013e0f4e909df74e.json
+[2026-04-10T22:24:38,710-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/2719.b7cdc8378ba73ee84bb9.js
+[2026-04-10T22:24:38,723-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 10ms   /manage/react/data/locales/en/settings.3957b1206f4eeb70a0428dd208764931.json
+[2026-04-10T22:24:39,366-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 2ms    /manage/react/js/81237.9d69d3bb0eb42b5e811f.js
+[2026-04-10T22:24:39,366-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/68219.03dcf2aee4de91c66cf1.js
+[2026-04-10T22:24:39,366-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 2ms    /manage/react/js/90372.22a8ffec71bafebd0f2d.js
+[2026-04-10T22:24:39,366-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 3ms    /manage/react/js/70893.d0d7939375499345a880.js
+[2026-04-10T22:24:39,368-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 5ms    /manage/react/js/1865.4538b933de77a8df23cc.js
+[2026-04-10T22:24:39,373-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/83286.a9d1f11be207cbf9f542.js
+[2026-04-10T22:24:39,373-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/js/26459.565267c1caf8a953b90c.js
+[2026-04-10T22:24:39,373-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/16653.f5c4b4d298753fcee6c9.js
+[2026-04-10T22:24:39,374-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/13015.e91e4ba49fddc8516a8b.js
+[2026-04-10T22:24:39,375-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/js/73640.21c61ca3d97f9268c4e7.js
+[2026-04-10T22:24:39,377-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/10179.2ac67a7280047bb2ed9a.js
+[2026-04-10T22:24:39,377-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/37491.588005f2b57d87721a04.js
+[2026-04-10T22:24:39,378-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 2ms    /manage/react/js/99825.3e226aed1b20bd2d9e0a.js
+[2026-04-10T22:24:39,378-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/js/82594.e8062aeb634ba06bc5d2.js
+[2026-04-10T22:24:39,382-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/js/83986.25cf83c9003e2b0e7997.js
+[2026-04-10T22:24:39,382-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 2ms    /manage/react/js/44965.97c71b361abfb90b2afd.js
+[2026-04-10T22:24:39,382-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/29676.49cf35196ccde92dab60.js
+[2026-04-10T22:24:39,388-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/6649.09eb8fce674f1e31cd6b.js
+[2026-04-10T22:24:39,397-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 15ms   /manage/react/js/settings.7cc68dedbe5230cdaec6.js
+[2026-04-10T22:24:39,418-07:00] [     172.19.0.1 -> webapi-6  ] PUT   200 48ms   /api/self
+[2026-04-10T22:24:39,519-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /api/s/default/stat/sdn
+[2026-04-10T22:24:39,520-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 2ms    /manage/react/js/19803.52f3e1d5cd639c1955e3.js
+[2026-04-10T22:24:39,520-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 2ms    /manage/react/js/29758.c37194867e71a9f00c54.js
+[2026-04-10T22:24:39,520-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 4ms    /api/s/default/stat/current-channel
+[2026-04-10T22:24:39,520-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/js/48734.32617efdbb9b4a7715a0.js
+[2026-04-10T22:24:39,522-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 1ms    /manage/react/js/22973.2595a480659671912145.js
+[2026-04-10T22:24:39,523-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 9ms    /v2/api/site/default/wlan/enriched-configuration
+[2026-04-10T22:24:39,536-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/data/locales/en/systemLog.f88cb9135c602cdcc2bb664d18fdcfbc.json
+[2026-04-10T22:24:39,536-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 2ms    /manage/react/data/locales/en/search.aa1e2abf393877f99543c5ea4f4c07a9.json
+[2026-04-10T22:24:39,537-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 1ms    /manage/react/data/locales/en/languages.e642832bdd78387712290a29758f08fb.json
+[2026-04-10T22:24:39,537-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/data/locales/en/ports.6c40f023421068944026cfe276da1a61.json
+[2026-04-10T22:24:39,612-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 4ms    /v2/api/site/default/wan-slas
+[2026-04-10T22:24:39,614-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 7ms    /v2/api/site/default/trafficroutes
+[2026-04-10T22:24:39,621-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 6ms    /v2/api/site/default/vpn/connections
+[2026-04-10T22:24:39,628-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 14ms   /v2/api/site/default/global/config/network
+[2026-04-10T22:24:39,654-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /api/s/default/stat/portforward
+[2026-04-10T22:24:39,655-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 3ms    /v2/api/site/default/magicsitetositevpn/configs
+[2026-04-10T22:24:39,657-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 1ms    /api/s/default/stat/portforward
+[2026-04-10T22:24:39,662-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 5ms    /v2/api/site/default/content-filtering
+[2026-04-10T22:24:54,829-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 3ms    /manage/react/js/69029.0322f905942eee19320c.js
+[2026-04-10T22:24:54,829-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 2ms    /manage/react/js/clients.06b8b7c68c03e2afc6e2.js
+[2026-04-10T22:24:54,830-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 3ms    /manage/react/js/61592.173a4e2dc6bfd986f0a5.js
+[2026-04-10T22:24:54,831-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 4ms    /manage/react/js/1758.a43dcd7e5d5822d375d4.js
+[2026-04-10T22:24:54,831-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 4ms    /manage/react/js/10916.33d438aa1d0702227757.js
+[2026-04-10T22:24:54,831-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/74925.5f4fd9fbd564a4be23c4.js
+[2026-04-10T22:24:54,870-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 7ms    /v2/api/site/default/network-members-groups
+[2026-04-10T22:24:54,904-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 15ms   /v2/api/site/default/wifi-stats/details?start=1775798597979&end=1775884997979&apMac=all
+[2026-04-10T22:24:54,972-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 3ms    /v2/api/site/default/clients/active?includeTrafficUsage=true&includeUnifiDevices=true
+[2026-04-10T22:25:00,327-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 6ms    /v2/api/site/default/static-dns
+[2026-04-10T22:25:00,328-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 6ms    /v2/api/site/default/static-dns/devices
+[2026-04-10T22:25:00,400-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 77ms   /v2/api/site/default/vendor-ids
+[2026-04-10T22:25:00,411-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 6ms    /v2/api/site/default/active-leases
+[2026-04-10T22:25:00,412-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 6ms    /v2/api/site/default/excluded-ips/
+[2026-04-10T22:25:02,694-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 6ms    /v2/api/site/default/wifi-stats/details?start=1775798597979&end=1775884997979&apMac=all
+[2026-04-10T22:25:02,791-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 5ms    /v2/api/site/default/clients/active?includeTrafficUsage=true&includeUnifiDevices=true
+[2026-04-10T22:25:04,965-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 1ms    /manage/react/js/82942.991d1fadfa3c0b4114e8.js
+[2026-04-10T22:25:04,965-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/89716.d8436adf97c7242d2ffb.js
+[2026-04-10T22:25:04,966-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 2ms    /manage/react/js/72272.eff9ca1b58a908610507.js
+[2026-04-10T22:25:04,966-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 2ms    /manage/react/js/insights.d09d7ece6ca0339125da.js
+[2026-04-10T22:25:04,966-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 2ms    /manage/react/js/30715.ddf54b4de8501c3eef32.js
+[2026-04-10T22:25:04,984-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 9ms    /manage/react/js/16443.b20c413536e2798b5818.js
+[2026-04-10T22:25:04,985-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 1ms    /manage/react/data/locales/en/countries.1364435cdf606d77e70246abbd52d0ab.json
+[2026-04-10T22:25:05,004-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 2ms    /manage/react/js/flows.9ee9b8835f3a6f785cf4.js
+[2026-04-10T22:25:05,066-07:00] [     172.19.0.1 -> webapi-8  ] PUT   200 45ms   /api/self
+[2026-04-10T22:25:05,195-07:00] [     172.19.0.1 -> webapi-5  ] POST  200 140ms  /v2/api/site/default/traffic-flows
+[2026-04-10T22:25:05,206-07:00] [     172.19.0.1 -> webapi-3  ] GET   200 4ms    /v2/api/site/default/firewall/zone
+[2026-04-10T22:25:05,256-07:00] [     172.19.0.1 -> webapi-6  ] GET   200 55ms   /v2/api/site/default/traffic-flows/filter-data?inputSize=10000&outputSize=1000&skipElements=0
+[2026-04-10T22:25:05,308-07:00] [     172.19.0.1 -> webapi-7  ] GET   200 2ms    /api/s/default/rest/networkconf
+[2026-04-10T22:25:34,911-07:00] [     172.19.0.1 -> webapi-8  ] GET   200 22ms   /v2/api/site/default/aggregated-dashboard?historySeconds=86400
+[2026-04-10T22:26:32,421-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 10ms   /v2/api/site/default/settings/wifiai/defaults
+[2026-04-10T22:26:32,542-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 19ms   /v2/api/site/default/wlan/defaults
+[2026-04-10T22:26:32,549-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 5ms    /v2/api/site/default/settings/connectivity/defaults
+[2026-04-10T22:26:32,553-07:00] [     172.19.0.1 -> webapi-9  ] GET   200 4ms    /v2/api/site/default/settings/element_adopt/defaults
+[2026-04-10T22:26:32,555-07:00] [     172.19.0.1 -> webapi-10 ] GET   200 8ms    /v2/api/site/default/wlan-capabilities
+[2026-04-10T22:26:32,556-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 5ms    /v2/api/site/default/device/wireless-links
+[2026-04-10T22:26:32,661-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 2ms    /api/s/default/stat/current-channel
+[2026-04-10T22:26:38,998-07:00] [     172.19.0.1 -> webapi-9  ] GET   200 2ms    /manage/react/js/96277.bd037ab54dc09eacf23e.js
+[2026-04-10T22:26:38,998-07:00] [     172.19.0.1 -> webapi-10 ] GET   200 2ms    /manage/react/js/70909.f764935490f536e0426b.js
+[2026-04-10T22:26:39,004-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/data/locales/en/logs.cb9492e246da65bf9f39e67cdf473c6a.json
+[2026-04-10T22:26:39,004-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 1ms    /manage/react/data/locales/en/logEvents.3988f259d425ac92a04ca0a591d0f98d.json
+[2026-04-10T22:26:39,450-07:00] [     172.19.0.1 -> webapi-9  ] GET   200 2ms    /manage/react/js/logs.9c86751e9186a16cce4a.js
+[2026-04-10T22:26:39,450-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 2ms    /manage/react/js/23195.08bebb345465198faacd.js
+[2026-04-10T22:26:39,475-07:00] [     172.19.0.1 -> webapi-10 ] GET   200 4ms    /v2/api/site/default/features/AFC_CAPABLE_AP_ADOPTED/exists
+[2026-04-10T22:26:39,475-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 4ms    /v2/api/site/default/features/MISSION_CRITICAL_ADOPTED/exists
+[2026-04-10T22:26:39,475-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 4ms    /v2/api/site/default/features/LTE_BACKUP_ADOPTED/exists
+[2026-04-10T22:26:39,475-07:00] [     172.19.0.1 -> webapi-9  ] GET   200 3ms    /v2/api/site/default/features/UPS_ADOPTED/exists
+[2026-04-10T22:26:39,477-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 4ms    /v2/api/site/default/features/MOBILE_BROADBAND_ADOPTED/exists
+[2026-04-10T22:26:39,486-07:00] [     172.19.0.1 -> webapi-10 ] GET   200 1ms    /manage/react/js/78711.6e70fe4744ef4c730825.js
+[2026-04-10T22:26:39,486-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/js/53317.8376b871c7d3bd1e8e2a.js
+[2026-04-10T22:26:39,486-07:00] [     172.19.0.1 -> webapi-9  ] GET   200 1ms    /manage/react/js/43290.1c66958ca90149d18a22.js
+[2026-04-10T22:26:39,493-07:00] [     172.19.0.1 -> webapi-10 ] GET   200 1ms    /manage/react/data/locales/en/logSection.97b8749b17edd90a0487b4d1d4c9150b.json
+[2026-04-10T22:26:39,493-07:00] [     172.19.0.1 -> webapi-5  ] GET   200 1ms    /manage/react/data/locales/en/systemLogAction.b10207f4e296747483e5b393fea5ade6.json
+[2026-04-10T22:26:39,494-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 2ms    /manage/react/data/locales/en/adminChanges.41399fafe2a8045c1ecb2876a2e44f51.json
+[2026-04-10T22:26:39,502-07:00] [     172.19.0.1 -> webapi-4  ] GET   200 19ms   /v2/api/site/default/system-log/setting
+[2026-04-10T22:26:39,637-07:00] [     172.19.0.1 -> webapi-5  ] POST  200 76ms   /v2/api/site/default/system-log/count
+[2026-04-10T22:26:39,637-07:00] [     172.19.0.1 -> webapi-11 ] POST  200 75ms   /v2/api/site/default/system-log/count
+[2026-04-10T22:26:39,639-07:00] [     172.19.0.1 -> webapi-10 ] POST  200 80ms   /v2/api/site/default/system-log/filter-data
+[2026-04-10T22:26:39,639-07:00] [     172.19.0.1 -> webapi-9  ] POST  200 81ms   /v2/api/site/default/system-log/filter-data
+[2026-04-10T22:26:39,688-07:00] [     172.19.0.1 -> webapi-5  ] POST  200 48ms   /v2/api/site/default/system-log/critical
+[2026-04-10T22:26:39,696-07:00] [     172.19.0.1 -> webapi-4  ] POST  200 68ms   /v2/api/site/default/system-log/all
+[2026-04-10T22:26:46,370-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 11ms   /v2/api/site/default/aggregated-dashboard?historySeconds=86400
+[2026-04-10T22:27:14,237-07:00] [     172.19.0.1 -> webapi-10 ] GET   200 0ms    /api/s/default/stat/portforward
+[2026-04-10T22:27:16,315-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 4ms    /v2/api/site/default/topology
+[2026-04-10T22:27:16,320-07:00] [     172.19.0.1 -> webapi-9  ] GET   200 3ms    /v2/api/site/default/topology
+[2026-04-10T22:27:25,050-07:00] [     172.19.0.1 -> webapi-12 ] PUT   200 45ms   /api/self
+[2026-04-10T22:27:25,978-07:00] [     172.19.0.1 -> webapi-10 ] PUT   200 44ms   /api/self
+[2026-04-10T22:27:26,438-07:00] [     172.19.0.1 -> webapi-11 ] GET   200 3ms    /v2/api/site/default/topology
+[2026-04-10T22:27:27,780-07:00] [     172.19.0.1 -> webapi-12 ] GET   200 9ms    /v2/api/site/default/aggregated-dashboard?historySeconds=86400
+[2026-04-10T22:27:27,794-07:00] [     172.19.0.1 -> webapi-9  ] PUT   200 46ms   /api/self

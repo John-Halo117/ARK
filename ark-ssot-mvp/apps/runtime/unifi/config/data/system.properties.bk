@@ -1,0 +1,55 @@
+## system.properties
+#
+# each unifi instance requires a set of ports:
+#
+## device inform
+# unifi.http.port=8080
+## controller UI / API
+# unifi.https.port=8443
+## portal redirect port for HTTP
+# portal.http.port=8880
+## portal redirect port for HTTPs
+# portal.https.port=8843
+## local-bound port for DB server
+# unifi.db.port=27117
+## UDP port used for STUN
+# unifi.stun.port=3478
+#
+## the IP devices should be talking to for inform
+# system_ip=a.b.c.d
+## disable mongodb journaling
+# unifi.db.nojournal=false
+## extra mongod args
+# unifi.db.extraargs
+#
+## HTTPS options
+# unifi.https.ciphers=TLS_RSA_WITH_AES_256_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA
+# unifi.https.sslEnabledProtocols=TLSv1,SSLv2Hello
+# unifi.https.hsts=false
+# unifi.https.hsts.max_age=31536000
+# unifi.https.hsts.preload=false
+# unifi.https.hsts.subdomain=false
+#
+# Ports reserved for device redirector. There is no need to open
+# firewall for these ports on controller, however do NOT set
+# controller to use these ports.
+#
+# portal.redirector.port=8881
+# portal.redirector.port.wired=8882
+#
+# Port used for throughput measurement.
+# unifi.throughput.port=6789
+#
+#Fri Apr 10 22:23:16 PDT 2026
+reporter-uuid=90c1d64e-4202-4e0a-8e24-e1cb17d9b679
+debug.mgmt=warn
+db.mongo.local=false
+debug.setting_preference=auto
+is_default=false
+uuid=5aa9f621-a9fe-4462-a14d-f00d480ed35e
+db.mongo.uri=mongodb\://unifi\:change-me-now@unifi-db\:27017/unifi?tls\=false&authSource\=admin
+statdb.mongo.uri=mongodb\://unifi\:change-me-now@unifi-db\:27017/unifi_stat?tls\=false&authSource\=admin
+unifi.db.name=unifi
+debug.device=warn
+debug.system=warn
+debug.sdn=warn

@@ -1,0 +1,357 @@
+{
+  "name": "ARK MVP Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ark/homeassistant",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "9e3fb24b-2f97-4d80-9048-fad639de8a01",
+      "name": "Home Assistant Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -360
+      ],
+      "webhookId": "ark-homeassistant"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ark/jellyfin",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "3a67f4fd-fd7e-4e4e-a4e1-d07e03c664c6",
+      "name": "Jellyfin Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -120
+      ],
+      "webhookId": "ark-jellyfin"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ark/unifi",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "0354b6e1-441d-4d9d-a57d-898f09040b5d",
+      "name": "UniFi Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        120
+      ],
+      "webhookId": "ark-unifi"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ark/event",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "6ef12dbf-6de8-43ed-b5dd-2c054cc5d1cb",
+      "name": "Generic Hook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        360
+      ],
+      "webhookId": "ark-generic"
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "return [{ json: { source_hint: 'homeassistant', raw_payload: $json.body ?? $json, request_headers: $json.headers ?? {} } }];"
+      },
+      "id": "d4c57c3d-e064-4f7a-9d52-7ec065715ee0",
+      "name": "Tag Home Assistant Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        -360
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "return [{ json: { source_hint: 'jellyfin', raw_payload: $json.body ?? $json, request_headers: $json.headers ?? {} } }];"
+      },
+      "id": "2df043d6-5e04-41ea-aa3e-1dad8c05eaea",
+      "name": "Tag Jellyfin Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "return [{ json: { source_hint: 'unifi', raw_payload: $json.body ?? $json, request_headers: $json.headers ?? {} } }];"
+      },
+      "id": "683898d7-fa49-4131-bb42-98a055caecc8",
+      "name": "Tag UniFi Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const payload = $json.body ?? $json; return [{ json: { source_hint: payload.source || 'generic', raw_payload: payload, request_headers: $json.headers ?? {} } }];"
+      },
+      "id": "14e7f610-ecbd-455c-b6ad-db9e52e243a7",
+      "name": "Tag Generic Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const items = $input.all(); function inferValueKind(value){ if(value === null || value === undefined) return 'null'; if(Array.isArray(value)) return 'array'; const kind = typeof value; if(kind === 'number') return 'number'; if(kind === 'boolean') return 'boolean'; if(kind === 'string') return 'string'; if(kind === 'object') return 'object'; return 'json'; } function coerceScalar(value){ if(value === null || value === undefined) return null; if(typeof value !== 'string') return value; const trimmed = value.trim(); if(trimmed === '') return ''; if(trimmed === 'true' || trimmed === 'on') return true; if(trimmed === 'false' || trimmed === 'off') return false; if(trimmed === 'open' || trimmed === 'closed') return trimmed; const numeric = Number(trimmed); if(!Number.isNaN(numeric) && /^-?\\d+(\\.\\d+)?$/.test(trimmed)) return numeric; return trimmed; } function lowerDot(parts){ return parts.filter((part) => part !== undefined && part !== null && String(part).trim() !== '').map((part) => String(part).trim().toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\\.+|\\.+$/g, '')).filter(Boolean).join('.'); } function inferSignalFromUnit(domain, unit){ const normalizedUnit = String(unit || '').toLowerCase(); if(normalizedUnit === 'c' || normalizedUnit === 'f' || normalizedUnit.includes('celsius') || normalizedUnit.includes('fahrenheit')) return lowerDot([domain, 'temperature']); if(normalizedUnit === '%') return lowerDot([domain, 'percent']); if(normalizedUnit === 'w' || normalizedUnit === 'kw') return lowerDot([domain, 'power']); if(normalizedUnit === 'wh' || normalizedUnit === 'kwh') return lowerDot([domain, 'energy']); return ''; } function normalizeHomeAssistant(payload){ const stateObj = payload.event?.data?.new_state || payload.trigger?.to_state || payload.new_state || payload; const entityId = payload.entity_id || payload.trigger?.entity_id || payload.event?.data?.entity_id || stateObj.entity_id; const attributes = stateObj.attributes || payload.attributes || {}; const domain = (entityId || 'homeassistant.entity').split('.')[0]; const unitSignal = inferSignalFromUnit(domain, attributes.unit_of_measurement); const inferredSignal = payload.signal_key || lowerDot([domain, attributes.device_class || unitSignal || 'state']); const observedAt = payload.observed_at || stateObj.last_changed || payload.last_changed || payload.event?.time_fired || new Date().toISOString(); const value = payload.value !== undefined ? payload.value : coerceScalar(stateObj.state ?? payload.state); return { source: 'homeassistant', entity_id: entityId || payload.device_id || 'homeassistant.unknown', source_event_id: payload.context?.id || payload.event?.context?.id || payload.id || null, signal_key: inferredSignal || 'unknown.raw', observed_at: observedAt, started_at: payload.started_at || observedAt, ended_at: payload.ended_at || observedAt, value: value ?? payload, value_kind: payload.value_kind || inferValueKind(value ?? payload), unit: payload.unit || attributes.unit_of_measurement || null, metadata: { source_hint: 'homeassistant', entity_id: entityId || null, friendly_name: attributes.friendly_name || null, area_id: attributes.area_id || null, device_class: attributes.device_class || null, original_attributes: attributes }, raw_payload: payload }; } function normalizeJellyfin(payload){ const notificationType = payload.NotificationType || payload.notification_type || payload.event || 'event'; const itemType = payload.ItemType || payload.item_type || 'item'; const entityId = payload.ItemId || payload.SessionId || payload.DeviceId || payload.UserId || payload.ServerId || ('jellyfin.' + String(notificationType).toLowerCase()); const value = payload.value !== undefined ? payload.value : { notification_type: notificationType, item_type: itemType, item_name: payload.Name || payload.ItemName || null, user_name: payload.UserName || null, device_name: payload.DeviceName || null, playback_position_ticks: payload.PlaybackPositionTicks || null, played_to_completion: payload.PlayedToCompletion ?? null }; return { source: 'jellyfin', entity_id: entityId, source_event_id: payload.NotificationId || payload.Id || payload.SessionId || null, signal_key: payload.signal_key || lowerDot(['media', itemType, notificationType]), observed_at: payload.Timestamp || payload.Date || payload.observed_at || new Date().toISOString(), started_at: payload.started_at || payload.Timestamp || payload.Date || new Date().toISOString(), ended_at: payload.ended_at || payload.Timestamp || payload.Date || new Date().toISOString(), value, value_kind: payload.value_kind || inferValueKind(value), unit: payload.unit || null, metadata: { source_hint: 'jellyfin', server_name: payload.ServerName || null, user_name: payload.UserName || null, client: payload.Client || payload.DeviceName || null, remote_end_point: payload.RemoteEndPoint || null }, raw_payload: payload }; } function normalizeUnifi(payload){ const eventType = payload.event_type || payload.type || payload.alert_type || payload.event || 'event'; const subsystem = payload.subsystem || payload.application || payload.site || 'network'; const entityId = payload.entity_id || payload.client_mac || payload.mac || payload.device_id || payload.ap || payload.host || ('unifi.' + String(eventType).toLowerCase()); const value = payload.value !== undefined ? payload.value : (payload.status !== undefined ? payload.status : (payload.connected !== undefined ? payload.connected : payload)); return { source: 'unifi', entity_id: entityId, source_event_id: payload.id || payload.event_id || payload.alert_id || null, signal_key: payload.signal_key || lowerDot(['network', subsystem, eventType]), observed_at: payload.timestamp || payload.time || payload.observed_at || new Date().toISOString(), started_at: payload.started_at || payload.timestamp || payload.time || new Date().toISOString(), ended_at: payload.ended_at || payload.timestamp || payload.time || new Date().toISOString(), value, value_kind: payload.value_kind || inferValueKind(value), unit: payload.unit || payload.unit_of_measurement || null, metadata: { source_hint: 'unifi', site: payload.site || null, host: payload.host || null, subsystem, severity: payload.severity || null, ip: payload.ip || payload.client_ip || null }, raw_payload: payload }; } function normalizeGeneric(payload, sourceHint){ const source = payload.source || (sourceHint && sourceHint !== 'generic' ? sourceHint : 'generic'); const envelope = { source, entity_id: payload.entity_id || payload.device_id || payload.id || (source + '.unknown'), source_event_id: payload.source_event_id || payload.event_id || payload.id || null, signal_key: payload.signal_key || null, observed_at: payload.observed_at || payload.timestamp || payload.time || new Date().toISOString(), started_at: payload.started_at || payload.observed_at || payload.timestamp || payload.time || new Date().toISOString(), ended_at: payload.ended_at || payload.observed_at || payload.timestamp || payload.time || new Date().toISOString(), value: payload.value !== undefined ? payload.value : null, value_kind: payload.value_kind || inferValueKind(payload.value), unit: payload.unit || null, metadata: payload.metadata || {}, raw_payload: payload.raw_payload || payload }; const missingCore = !envelope.signal_key || envelope.value === null || !envelope.entity_id; if(missingCore){ envelope.signal_key = envelope.signal_key || null; envelope.value = envelope.value === null ? payload : envelope.value; envelope.value_kind = inferValueKind(envelope.value); } return envelope; } return items.map((item) => { const sourceHint = item.json.source_hint || 'generic'; const payload = item.json.raw_payload || item.json.body || item.json; let envelope; if(payload.source && payload.entity_id && payload.signal_key && payload.value !== undefined){ envelope = normalizeGeneric(payload, payload.source); } else if(sourceHint === 'homeassistant'){ envelope = normalizeHomeAssistant(payload); } else if(sourceHint === 'jellyfin'){ envelope = normalizeJellyfin(payload); } else if(sourceHint === 'unifi'){ envelope = normalizeUnifi(payload); } else { envelope = normalizeGeneric(payload, sourceHint); } const needsInference = !envelope.signal_key || envelope.signal_key === 'unknown.raw' || !envelope.entity_id || envelope.value === null || envelope.value === undefined; envelope.signal_key = envelope.signal_key || 'unknown.raw'; envelope.classifier_status = needsInference ? 'pending' : 'known'; envelope.metadata = { ...envelope.metadata, ingest_received_at: new Date().toISOString(), normalization_source: sourceHint }; envelope.needs_inference = needsInference; return { json: envelope }; });"
+      },
+      "id": "4a052d89-3bd0-4556-bee8-8af7ec9bf5d2",
+      "name": "Normalize Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"needs_inference\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "d8ebced7-83d5-4a4e-a52b-f6bfac092532",
+      "name": "Needs Inference?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const items = $input.all(); function inferValueKind(value){ if(value === null || value === undefined) return 'null'; if(Array.isArray(value)) return 'array'; const kind = typeof value; if(kind === 'number') return 'number'; if(kind === 'boolean') return 'boolean'; if(kind === 'string') return 'string'; if(kind === 'object') return 'object'; return 'json'; } const baseUrl = (process.env.OLLAMA_BASE_URL || 'http://ollama:11434').replace(/\\/$/, ''); const model = process.env.OLLAMA_MODEL || 'llama3.1:8b'; const advisorPrompt = ['- Convert the input payload into one JSON object with exactly these keys: signal_key, entity_id, value, value_kind, unit, and metadata, using only facts present in the payload.','- If any core field is uncertain, set signal_key to unknown.raw, keep the most faithful raw value you can extract, and record the uncertainty in metadata.classifier_notes.','- Return JSON only with no markdown, no prose, and no keys outside the required object.'].join('\\n'); return Promise.all(items.map(async (item) => { const envelope = item.json; try { const response = await this.helpers.httpRequest({ method: 'POST', url: baseUrl + '/api/generate', body: { model, prompt: advisorPrompt + '\\nPayload:\\n' + JSON.stringify({ source: envelope.source, entity_id: envelope.entity_id, signal_key: envelope.signal_key, value: envelope.value, metadata: envelope.metadata, raw_payload: envelope.raw_payload }), stream: false, format: 'json' }, json: true }); const raw = response.response ?? response.data?.response ?? response; const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; const signalKey = typeof parsed.signal_key === 'string' && parsed.signal_key.trim() ? parsed.signal_key.trim().toLowerCase() : 'unknown.raw'; const entityId = parsed.entity_id || envelope.entity_id || (envelope.source + '.unknown'); const value = parsed.value !== undefined ? parsed.value : (envelope.value !== undefined ? envelope.value : envelope.raw_payload); return { json: { ...envelope, signal_key: signalKey, entity_id: entityId, value, value_kind: parsed.value_kind || envelope.value_kind || inferValueKind(value), unit: parsed.unit || envelope.unit || null, metadata: { ...envelope.metadata, ...(parsed.metadata || {}), classifier_model: model, classifier_notes: parsed.metadata?.classifier_notes || (signalKey === 'unknown.raw' ? 'classification uncertain' : 'classified by ollama') }, classifier_status: signalKey === 'unknown.raw' ? 'fallback' : 'inferred', needs_inference: false } }; } catch (error) { const fallbackValue = envelope.value !== undefined ? envelope.value : envelope.raw_payload; return { json: { ...envelope, signal_key: envelope.signal_key || 'unknown.raw', entity_id: envelope.entity_id || (envelope.source + '.unknown'), value: fallbackValue, value_kind: envelope.value_kind || inferValueKind(fallbackValue), metadata: { ...envelope.metadata, classifier_model: model, classifier_notes: 'ollama unavailable; stored raw event', ollama_error: String(error.message || error) }, classifier_status: 'fallback', needs_inference: false } }; } }));"
+      },
+      "id": "d08e0e0d-e4dd-49f2-9175-a7cdabc90524",
+      "name": "Classify Unknown Signal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const items = $input.all(); function stable(value){ if(Array.isArray(value)) return '[' + value.map(stable).join(',') + ']'; if(value && typeof value === 'object'){ return '{' + Object.keys(value).sort().map((key) => JSON.stringify(key) + ':' + stable(value[key])).join(',') + '}'; } return JSON.stringify(value); } function fnv1a(str){ let hash = 0x811c9dc5; for(let i = 0; i < str.length; i += 1){ hash ^= str.charCodeAt(i); hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0; } return ('00000000' + hash.toString(16)).slice(-8); } function q(value){ return value === null || value === undefined || value === '' ? 'NULL' : '\\'' + String(value).replace(/'/g, \"''\") + '\\''; } function qjson(value){ return value === null || value === undefined ? 'NULL' : q(JSON.stringify(value)) + '::jsonb'; } function qts(value){ return value ? q(new Date(value).toISOString()) : 'NULL'; } return items.map((item) => { const envelope = item.json; const source = envelope.source || 'generic'; const entityId = envelope.entity_id || (source + '.unknown'); const signalKey = envelope.signal_key || 'unknown.raw'; const observedAt = envelope.observed_at || envelope.ended_at || envelope.started_at || new Date().toISOString(); const startedAt = envelope.started_at || observedAt; const endedAt = envelope.ended_at || observedAt; const metadata = envelope.metadata || {}; const rawPayload = envelope.raw_payload || envelope.value || {}; const value = envelope.value !== undefined ? envelope.value : rawPayload; const classifierStatus = envelope.classifier_status || 'known'; const fingerprintSeed = [source, envelope.source_event_id || '', entityId, signalKey, observedAt, stable(value), stable(rawPayload)].join('|'); const eventFingerprint = envelope.event_fingerprint || (source + ':' + fnv1a(fingerprintSeed)); const needsAnomalyLog = classifierStatus === 'fallback' || classifierStatus === 'error' || signalKey === 'unknown.raw'; const anomalyReason = needsAnomalyLog ? (metadata.classifier_notes || 'stored raw event because signal classification was incomplete') : null; return { json: { source, entity_id: entityId, signal_key: signalKey, observed_at: observedAt, started_at: startedAt, ended_at: endedAt, value, value_kind: envelope.value_kind || 'json', unit: envelope.unit || null, metadata, raw_payload: rawPayload, event_fingerprint: eventFingerprint, classifier_status: classifierStatus, source_event_id: envelope.source_event_id || null, needs_anomaly_log: needsAnomalyLog, anomaly_reason: anomalyReason, sql: { source: q(source), entity_id: q(entityId), signal_key: q(signalKey), observed_at: qts(observedAt), started_at: qts(startedAt), ended_at: qts(endedAt), value: qjson(value), metadata: qjson(metadata), raw_payload: qjson(rawPayload), event_fingerprint: q(eventFingerprint), value_kind: q(envelope.value_kind || 'json'), unit: q(envelope.unit || null), classifier_status: q(classifierStatus), source_event_id: q(envelope.source_event_id || null), anomaly_reason: q(anomalyReason) } } }; });"
+      },
+      "id": "dc79761f-a11a-4e63-8f44-a7ddd76aa790",
+      "name": "Prepare Persist Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH maybe_anomaly AS (\n  INSERT INTO ark_ingest_anomaly (\n    source,\n    entity_id,\n    signal_key,\n    observed_at,\n    reason,\n    raw_payload,\n    metadata\n  )\n  SELECT\n    {{$json.sql.source}}::text,\n    {{$json.sql.entity_id}}::text,\n    {{$json.sql.signal_key}}::text,\n    {{$json.sql.observed_at}}::timestamptz,\n    {{$json.sql.anomaly_reason}}::text,\n    {{$json.sql.raw_payload}},\n    {{$json.sql.metadata}}\n  WHERE {{ $json.needs_anomaly_log ? 'TRUE' : 'FALSE' }}::boolean\n  RETURNING id\n),\nresult AS (\n  SELECT *\n  FROM upsert_delta(\n    {{$json.sql.source}}::text,\n    {{$json.sql.entity_id}}::text,\n    {{$json.sql.signal_key}}::text,\n    {{$json.sql.started_at}}::timestamptz,\n    {{$json.sql.ended_at}}::timestamptz,\n    {{$json.sql.value}},\n    {{$json.sql.metadata}},\n    {{$json.sql.event_fingerprint}}::text,\n    {{$json.sql.value_kind}}::text,\n    {{$json.sql.unit}}::text,\n    {{$json.sql.raw_payload}},\n    {{$json.sql.classifier_status}}::text,\n    {{$json.sql.source_event_id}}::text\n  )\n)\nSELECT\n  result.action,\n  result.delta_id,\n  result.event_fingerprint,\n  result.merged,\n  result.snapshot_rows,\n  (SELECT id FROM maybe_anomaly LIMIT 1) AS anomaly_id,\n  {{$json.sql.source}}::text AS source,\n  {{$json.sql.entity_id}}::text AS entity_id,\n  {{$json.sql.signal_key}}::text AS signal_key,\n  {{$json.sql.classifier_status}}::text AS classifier_status\nFROM result;"
+      },
+      "id": "047ff2e0-e54d-4dac-abf1-398230e72147",
+      "name": "Persist Signal",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        500,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Home Assistant Hook": {
+      "main": [
+        [
+          {
+            "node": "Tag Home Assistant Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jellyfin Hook": {
+      "main": [
+        [
+          {
+            "node": "Tag Jellyfin Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UniFi Hook": {
+      "main": [
+        [
+          {
+            "node": "Tag UniFi Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generic Hook": {
+      "main": [
+        [
+          {
+            "node": "Tag Generic Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Home Assistant Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Jellyfin Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag UniFi Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Generic Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Envelope": {
+      "main": [
+        [
+          {
+            "node": "Needs Inference?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Inference?": {
+      "main": [
+        [
+          {
+            "node": "Classify Unknown Signal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Persist Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Unknown Signal": {
+      "main": [
+        [
+          {
+            "node": "Prepare Persist Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Persist Payload": {
+      "main": [
+        [
+          {
+            "node": "Persist Signal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "active": false,
+  "versionId": "b85d4d8e-c172-47fe-a153-6c6574f22b74",
+  "id": "ark-mvp-ingest"
+}

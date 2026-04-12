@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "auth",
+  "data": {
+    "users": [
+      {
+        "id": "21b0a66e058f4b3ca1d7b39ad3e14366",
+        "group_ids": [
+          "system-read-only"
+        ],
+        "is_owner": false,
+        "is_active": true,
+        "name": "Home Assistant Content",
+        "system_generated": true,
+        "local_only": false
+      },
+      {
+        "id": "ca8723d6194a468eaaa5de7c4d88ee13",
+        "group_ids": [
+          "system-admin"
+        ],
+        "is_owner": true,
+        "is_active": true,
+        "name": "Home Server",
+        "system_generated": false,
+        "local_only": false
+      }
+    ],
+    "groups": [
+      {
+        "id": "system-admin",
+        "name": "Administrators"
+      },
+      {
+        "id": "system-users",
+        "name": "Users"
+      },
+      {
+        "id": "system-read-only",
+        "name": "Read Only"
+      }
+    ],
+    "credentials": [
+      {
+        "id": "41999491909945b9a6eef6cf9e41ecb8",
+        "user_id": "ca8723d6194a468eaaa5de7c4d88ee13",
+        "auth_provider_type": "homeassistant",
+        "auth_provider_id": null,
+        "data": {
+          "username": "island68240"
+        }
+      }
+    ],
+    "refresh_tokens": [
+      {
+        "id": "e17e03a3f6044de4b1861c4dd36812f9",
+        "user_id": "21b0a66e058f4b3ca1d7b39ad3e14366",
+        "client_id": null,
+        "client_name": null,
+        "client_icon": null,
+        "token_type": "system",
+        "created_at": "2026-04-11T02:30:32.371910+00:00",
+        "access_token_expiration": 1800.0,
+        "token": "4e20c3d74185be035f19a248b4bac473d335759415761363fce8b7a4a6fd9473b8c3f7d78ae1ed094e0bc309c61e20ef0c2aec3fdac1766aeeb450d99bf8b04f",
+        "jwt_key": "68fa8b625a939c3bb1c2b9e235de5efc17c4d4dbde7f913adb4a2e54071fd9dbd7f52754505617b7ced90aeb2f2d118b2d857144e39d791a729fd62ffb2a4f80",
+        "last_used_at": null,
+        "last_used_ip": null,
+        "expire_at": null,
+        "credential_id": null,
+        "version": "2026.4.1"
+      }
+    ]
+  }
+}

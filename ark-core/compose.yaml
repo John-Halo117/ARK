@@ -1,0 +1,225 @@
+# ARK — production-oriented core stack
+# Copy .env.example to .env and set secrets before deploy.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  ark-net:
+    driver: bridge
+
+volumes:
+  nats_data:
+  duckdb_data:
+  grafana_data:
+  meilisearch_data:
+
+services:
+
+  # ------------------------------------------------------------------
+  # Event backbone (NATS JetStream)
+  # ------------------------------------------------------------------
+  nats:
+    image: nats:2.10-alpine
+    container_name: ark-nats
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - nats_data:/data
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    init: true
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ------------------------------------------------------------------
+  # DuckDB worker (single writer — start before consumers)
+  # ------------------------------------------------------------------
+  duckdb:
+    build:
+      context: ./duckdb
+      dockerfile: Dockerfile
+    image: ark/duckdb-worker:${ARK_IMAGE_TAG:-1}
+    container_name: ark-duckdb
+    restart: unless-stopped
+    volumes:
+      - duckdb_data:/data
+    environment:
+      NATS_URL: nats://nats:4222
+      DB_PATH: /data/ark.duckdb
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 2g
+    cpus: 2.0
+    init: true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; p=os.environ.get('DB_PATH',''); exit(0 if p and os.path.exists(p) else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ------------------------------------------------------------------
+  # Service mesh registry
+  # ------------------------------------------------------------------
+  mesh-registry:
+    build:
+      context: ./mesh
+      dockerfile: Dockerfile
+    image: ark/mesh-registry:${ARK_IMAGE_TAG:-1}
+    container_name: ark-mesh
+    restart: unless-stopped
+    environment:
+      NATS_URL: nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    init: true
+
+  # ------------------------------------------------------------------
+  # Autoscaler (Docker API — privileged)
+  # ------------------------------------------------------------------
+  autoscaler:
+    build:
+      context: ./autoscaler
+      dockerfile: Dockerfile
+    image: ark/autoscaler:${ARK_IMAGE_TAG:-1}
+    container_name: ark-autoscaler
+    restart: unless-stopped
+    volumes:
+      # rw required — Docker API needs write access to the socket
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      NATS_URL: nats://nats:4222
+      DOCKER_HOST: unix:///var/run/docker.sock
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    init: true
+
+  # ------------------------------------------------------------------
+  # Agent runtime (shared DuckDB file — prefer single-writer via duckdb svc)
+  # ------------------------------------------------------------------
+  aar:
+    build:
+      context: .
+      dockerfile: runtime/Dockerfile
+    image: ark/aar:${ARK_IMAGE_TAG:-1}
+    container_name: ark-aar
+    restart: unless-stopped
+    volumes:
+      - ./agents:/agents:ro
+      - duckdb_data:/data
+    environment:
+      NATS_URL: nats://nats:4222
+      DB_PATH: /data/ark.duckdb
+    depends_on:
+      nats:
+        condition: service_healthy
+      duckdb:
+        condition: service_healthy
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 2g
+    cpus: 2.0
+    init: true
+
+  # ------------------------------------------------------------------
+  # Composio (verify image + ports for your Composio version)
+  # ------------------------------------------------------------------
+  composio:
+    image: composio/composio:latest
+    container_name: ark-composio
+    restart: unless-stopped
+    environment:
+      COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:?set COMPOSIO_API_KEY in .env}
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 1g
+    cpus: 1.0
+
+  composio_bridge:
+    build:
+      context: ./agents/composio_bridge
+      dockerfile: Dockerfile
+    image: ark/composio-bridge:${ARK_IMAGE_TAG:-1}
+    container_name: ark-composio-bridge
+    restart: unless-stopped
+    environment:
+      NATS_URL: nats://nats:4222
+      COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:?}
+    depends_on:
+      nats:
+        condition: service_healthy
+      composio:
+        condition: service_started
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    init: true
+
+  # ------------------------------------------------------------------
+  # Observability (optional)
+  # ------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: ark-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.7
+    container_name: ark-meili
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY in .env}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "${MEILI_PORT:-7700}:7700"
+    networks: [ark-net]
+    logging: *default-logging
+    mem_limit: 1g
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

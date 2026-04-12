@@ -1,0 +1,102 @@
+services:
+  postgres:
+    image: postgres:16.4
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${ARK_POSTGRES_DB}
+      POSTGRES_USER: ${ARK_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ARK_POSTGRES_PASSWORD}
+      TZ: ${ARK_TIMEZONE}
+    ports:
+      - "${ARK_POSTGRES_PORT}:5432"
+    volumes:
+      - ${ARK_DATA_ROOT}/postgres:/var/lib/postgresql/data
+      - ../storage/postgres/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ARK_POSTGRES_USER} -d ${ARK_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    image: n8nio/n8n:1.89.2
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: ${ARK_TIMEZONE}
+      GENERIC_TIMEZONE: ${ARK_TIMEZONE}
+      N8N_HOST: ${ARK_N8N_HOST}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${ARK_N8N_PROTOCOL}
+      N8N_EDITOR_BASE_URL: ${ARK_N8N_EDITOR_BASE_URL}
+      WEBHOOK_URL: ${ARK_N8N_WEBHOOK_URL}
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${ARK_N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${ARK_N8N_BASIC_AUTH_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${ARK_N8N_ENCRYPTION_KEY}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${ARK_POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${ARK_POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${ARK_POSTGRES_PASSWORD}
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${ARK_OLLAMA_MODEL}
+    ports:
+      - "${ARK_N8N_PORT}:5678"
+    volumes:
+      - ${ARK_DATA_ROOT}/n8n:/home/node/.n8n
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${ARK_TIMEZONE}
+      GF_SECURITY_ADMIN_USER: ${ARK_GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${ARK_GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_DEFAULT_THEME: light
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
+    ports:
+      - "${ARK_GRAFANA_PORT}:3000"
+    volumes:
+      - ${ARK_DATA_ROOT}/grafana:/var/lib/grafana
+      - ../insight/grafana:/var/lib/grafana/import:ro
+
+  ollama:
+    image: ollama/ollama:0.3.12
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${ARK_TIMEZONE}
+      OLLAMA_KEEP_ALIVE: 5m
+    ports:
+      - "${ARK_OLLAMA_PORT}:11434"
+    volumes:
+      - ${ARK_DATA_ROOT}/ollama:/root/.ollama
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    restart: unless-stopped
+    env_file:
+      - .env
+    command:
+      - /usr/sbin/mosquitto
+      - -c
+      - /mosquitto/config/mosquitto.conf
+    ports:
+      - "${ARK_MQTT_PORT}:8883"
+      - "${ARK_MQTT_WS_PORT}:9001"
+    volumes:
+      - ${ARK_MQTT_CONFIG_DIR}:/mosquitto/config
+      - ${ARK_MQTT_DATA_DIR}:/mosquitto/data
+      - ${ARK_MQTT_LOG_DIR}:/mosquitto/log
+      - ${ARK_MQTT_CERTS_DIR}:/mosquitto/certs:ro

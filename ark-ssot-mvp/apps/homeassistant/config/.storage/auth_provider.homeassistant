@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "auth_provider.homeassistant",
+  "data": {
+    "users": [
+      {
+        "username": "island68240",
+        "password": "JDJiJDEyJEVNRDA2WlZTMXJBVERLcG02SmY5WGVtSng2Z0JSaTNMT3RpdVIub0lxYmhOTi5IV1BscVpT"
+      }
+    ]
+  }
+}
