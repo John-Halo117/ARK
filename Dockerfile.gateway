@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    aiohttp==3.9.1 \
+    nats-py==2.4.0 \
+    duckdb==0.10 \
+    aiofiles==23.2.0
+
+COPY ark/ ./ark/
+
+ENV PYTHONUNBUFFERED=1 \
+    NATS_URL=nats://nats:4222 \
+    MESH_URL=http://ark-mesh:7000
+
+EXPOSE 8080
+
+CMD ["python", "-m", "ark.api_gateway"]

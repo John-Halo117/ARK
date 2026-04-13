@@ -1,0 +1,20 @@
+FROM rust:1.75-slim as builder
+
+WORKDIR /app
+
+COPY ark/Cargo.toml ark/Cargo.lock* .
+COPY ark/src ./src
+
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/target/release/ark /usr/local/bin/ark
+
+ENV RUST_LOG=info
+
+CMD ["ark"]

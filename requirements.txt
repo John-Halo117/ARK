@@ -1,0 +1,4 @@
+nats-py==2.4.0
+aiohttp==3.9.1
+duckdb==0.10
+aiofiles==23.2.0
