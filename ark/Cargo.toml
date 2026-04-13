@@ -1,0 +1,15 @@
+[package]
+name = "ark"
+version = "1.6.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+opentelemetry = "0.26"
+tracing-opentelemetry = "0.27"
+thiserror = "2"

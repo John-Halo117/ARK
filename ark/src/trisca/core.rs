@@ -1,0 +1,61 @@
+use crate::types::LKS;
+
+pub fn compute(data: &[f32]) -> LKS {
+    if data.is_empty() {
+        return LKS { qts:0.0,dsi:0.0,dss:0.0,dss_kalman:0.0,phase:"invalid".into() };
+    }
+
+    let mut sorted = data.to_vec();
+    sorted.sort_by(|a,b| a.partial_cmp(b).unwrap());
+
+    let n = sorted.len();
+    let qs = (n + 4) / 5;
+
+    let mean = |s:usize,c:usize| {
+        let e = (s+c).min(n);
+        let sl = &sorted[s..e];
+        if sl.is_empty() {0.0} else {sl.iter().sum::<f32>()/sl.len() as f32}
+    };
+
+    let q1 = mean(0,qs);
+    let q2 = mean(qs,qs);
+    let q3 = mean(qs*2,qs);
+    let q4 = mean(qs*3,qs);
+    let q5 = mean(qs*4,n);
+
+    let qts = (q1+q3+q5)/3.0;
+
+    let total: f32 = data.iter().sum();
+    let p: Vec<f32> = data.iter().map(|&x| if total>0.0 {x/total} else {0.0}).collect();
+
+    let h = if n>1 {
+        -p.iter().filter(|&&pi|pi>0.0).map(|&pi|pi*pi.ln()).sum::<f32>()/(n as f32).ln()
+    } else {0.0};
+
+    let mut sum_term=0.0;
+    for (i,&v) in sorted.iter().enumerate() {
+        sum_term += (n-i) as f32 * v;
+    }
+    let gini = if total>0.0 {
+        ((n as f32 +1.0) -2.0*sum_term/total)/n as f32
+    } else {0.0};
+
+    let dsi = h*(1.0-gini.clamp(0.0,1.0));
+
+    let b = (q2+q3+q4)/3.0;
+    let eps = 1e-10;
+    let s1 = q5/(b+eps);
+    let s2 = b/(q1+eps);
+    let s3 = (q5-q1)/(b+eps);
+    let dss = (s1+s2+s3)/3.0;
+
+    let phase = if dss>1.0 {"critical"} else if dss>0.7 {"unstable"} else if dss>0.4 {"drift"} else {"stable"};
+
+    LKS {
+        qts,
+        dsi,
+        dss,
+        dss_kalman: dss*0.92,
+        phase: phase.into(),
+    }
+}
