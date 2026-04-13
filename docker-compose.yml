@@ -9,6 +9,11 @@ services:
       - "8222:8222"
     volumes:
       - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - ark-net
 
@@ -24,7 +29,13 @@ services:
     ports:
       - "7000:7000"
     depends_on:
-      - nats
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7000/api/mesh"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - ark-net
 
@@ -42,7 +53,13 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      - nats
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - ark-net
     privileged: true
@@ -54,10 +71,53 @@ services:
       dockerfile: Dockerfile.duckdb
     container_name: ark-duckdb
     working_dir: /app
+    ports:
+      - "7777:7777"
     volumes:
       - duckdb_data:/data
     environment:
       PYTHONUNBUFFERED: "1"
+    networks:
+      - ark-net
+
+  # CORE INFRA - API Gateway
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: ark-gateway
+    environment:
+      NATS_URL: nats://nats:4222
+      MESH_URL: http://ark-mesh:7000
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mesh-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - ark-net
+
+  # ANALYSIS - Rust ARK Core
+  ark:
+    build:
+      context: .
+      dockerfile: Dockerfile.ark
+    container_name: ark-core
+    environment:
+      RUST_LOG: info
+    ports:
+      - "9999:9999"
+    depends_on:
+      duckdb:
+        condition: service_started
+      nats:
+        condition: service_healthy
     networks:
       - ark-net
 
@@ -71,8 +131,11 @@ services:
       INSTANCE_ID: opencode-0
       NATS_URL: nats://nats:4222
       PYTHONUNBUFFERED: "1"
+    ports:
+      - "6001:6001"
     depends_on:
-      - nats
+      nats:
+        condition: service_healthy
     networks:
       - ark-net
 
@@ -86,8 +149,11 @@ services:
       INSTANCE_ID: openwolf-0
       NATS_URL: nats://nats:4222
       PYTHONUNBUFFERED: "1"
+    ports:
+      - "6002:6002"
     depends_on:
-      - nats
+      nats:
+        condition: service_healthy
     networks:
       - ark-net
 
@@ -102,8 +168,113 @@ services:
       NATS_URL: nats://nats:4222
       COMPOSIO_API_KEY: ${COMPOSIO_API_KEY:-}
       PYTHONUNBUFFERED: "1"
+    ports:
+      - "6003:6003"
     depends_on:
-      - nats
+      nats:
+        condition: service_healthy
+    networks:
+      - ark-net
+
+  # EMITTERS - Home Assistant Event Bridge
+  ha-emitter:
+    build:
+      context: .
+      dockerfile: Dockerfile.ha-emitter
+    container_name: ark-ha-emitter
+    environment:
+      INSTANCE_ID: ha-emitter-0
+      NATS_URL: nats://nats:4222
+      HA_URL: http://homeassistant:8123
+      HA_TOKEN: ${HA_TOKEN:-}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "6010:6010"
+    depends_on:
+      nats:
+        condition: service_healthy
+      homeassistant:
+        condition: service_started
+    networks:
+      - ark-net
+
+  # EMITTERS - Jellyfin Media Events
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: ark-jellyfin
+    ports:
+      - "8096:8096"
+    volumes:
+      - jellyfin_data:/config
+      - jellyfin_cache:/cache
+    environment:
+      TZ: UTC
+    networks:
+      - ark-net
+
+  jellyfin-emitter:
+    build:
+      context: .
+      dockerfile: Dockerfile.jellyfin-emitter
+    container_name: ark-jellyfin-emitter
+    environment:
+      INSTANCE_ID: jellyfin-emitter-0
+      NATS_URL: nats://nats:4222
+      JELLYFIN_URL: http://jellyfin:8096
+      JELLYFIN_TOKEN: ${JELLYFIN_TOKEN:-}
+      JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:-}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "6011:6011"
+    depends_on:
+      nats:
+        condition: service_healthy
+      jellyfin:
+        condition: service_started
+    networks:
+      - ark-net
+
+  # EMITTERS - UniFi Network Events
+  unifi:
+    image: linuxserver/unifi-controller:latest
+    container_name: ark-unifi
+    ports:
+      - "3478:3478/udp"
+      - "10001:10001/udp"
+      - "8080:8080"
+      - "8443:8443"
+      - "1900:1900/udp"
+      - "5514:5514/udp"
+    volumes:
+      - unifi_data:/config
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: UTC
+      MEM_LIMIT: 1024
+    networks:
+      - ark-net
+
+  unifi-emitter:
+    build:
+      context: .
+      dockerfile: Dockerfile.unifi-emitter
+    container_name: ark-unifi-emitter
+    environment:
+      INSTANCE_ID: unifi-emitter-0
+      NATS_URL: nats://nats:4222
+      UNIFI_URL: https://unifi:8443
+      UNIFI_USERNAME: ${UNIFI_USERNAME:-}
+      UNIFI_PASSWORD: ${UNIFI_PASSWORD:-}
+      UNIFI_SITE: ${UNIFI_SITE:-default}
+      PYTHONUNBUFFERED: "1"
+    ports:
+      - "6012:6012"
+    depends_on:
+      nats:
+        condition: service_healthy
+      unifi:
+        condition: service_started
     networks:
       - ark-net
 
@@ -122,7 +293,8 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
-      - nats
+      nats:
+        condition: service_healthy
     networks:
       - ark-net
 
@@ -178,96 +350,6 @@ services:
       - meilisearch_data:/meili_data
     environment:
       MEILI_ENV: production
-    networks:
-      - ark-net
-
-  # EMITTERS - Home Assistant Event Bridge
-  ha-emitter:
-    build:
-      context: .
-      dockerfile: Dockerfile.ha-emitter
-    container_name: ark-ha-emitter
-    environment:
-      INSTANCE_ID: ha-emitter-0
-      NATS_URL: nats://nats:4222
-      HA_URL: http://homeassistant:8123
-      HA_TOKEN: ${HA_TOKEN:-}
-      PYTHONUNBUFFERED: "1"
-    depends_on:
-      - nats
-      - homeassistant
-    networks:
-      - ark-net
-
-  # EMITTERS - Jellyfin Media Events
-  jellyfin:
-    image: jellyfin/jellyfin:latest
-    container_name: ark-jellyfin
-    ports:
-      - "8096:8096"
-    volumes:
-      - jellyfin_data:/config
-      - jellyfin_cache:/cache
-    environment:
-      TZ: UTC
-    networks:
-      - ark-net
-
-  jellyfin-emitter:
-    build:
-      context: .
-      dockerfile: Dockerfile.jellyfin-emitter
-    container_name: ark-jellyfin-emitter
-    environment:
-      INSTANCE_ID: jellyfin-emitter-0
-      NATS_URL: nats://nats:4222
-      JELLYFIN_URL: http://jellyfin:8096
-      JELLYFIN_TOKEN: ${JELLYFIN_TOKEN:-}
-      JELLYFIN_USER_ID: ${JELLYFIN_USER_ID:-}
-      PYTHONUNBUFFERED: "1"
-    depends_on:
-      - nats
-      - jellyfin
-    networks:
-      - ark-net
-
-  # EMITTERS - UniFi Network Events
-  unifi:
-    image: linuxserver/unifi-controller:latest
-    container_name: ark-unifi
-    ports:
-      - "3478:3478/udp"
-      - "10001:10001/udp"
-      - "8080:8080"
-      - "8443:8443"
-      - "1900:1900/udp"
-      - "5514:5514/udp"
-    volumes:
-      - unifi_data:/config
-    environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: UTC
-      MEM_LIMIT: 1024
-    networks:
-      - ark-net
-
-  unifi-emitter:
-    build:
-      context: .
-      dockerfile: Dockerfile.unifi-emitter
-    container_name: ark-unifi-emitter
-    environment:
-      INSTANCE_ID: unifi-emitter-0
-      NATS_URL: nats://nats:4222
-      UNIFI_URL: https://unifi:8443
-      UNIFI_USERNAME: ${UNIFI_USERNAME:-}
-      UNIFI_PASSWORD: ${UNIFI_PASSWORD:-}
-      UNIFI_SITE: ${UNIFI_SITE:-default}
-      PYTHONUNBUFFERED: "1"
-    depends_on:
-      - nats
-      - unifi
     networks:
       - ark-net
 
