@@ -13,3 +13,5 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 opentelemetry = "0.26"
 tracing-opentelemetry = "0.27"
 thiserror = "2"
+duckdb = "0.10"
+zstd = "0.13"
