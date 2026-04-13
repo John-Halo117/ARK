@@ -49,14 +49,15 @@ services:
 
   # CORE INFRA - Truth layer
   duckdb:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: Dockerfile.duckdb
     container_name: ark-duckdb
     working_dir: /app
     volumes:
       - duckdb_data:/data
     environment:
       PYTHONUNBUFFERED: "1"
-    command: python -c "import duckdb, time; conn = duckdb.connect('/data/ark.duckdb'); conn.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, type VARCHAR, payload JSON, created_at TIMESTAMP DEFAULT now())'); conn.execute('CREATE TABLE IF NOT EXISTS state (key VARCHAR PRIMARY KEY, value JSON, updated_at TIMESTAMP DEFAULT now())'); conn.execute('CREATE TABLE IF NOT EXISTS metrics (name VARCHAR, value DOUBLE, timestamp TIMESTAMP, sample_time TIMESTAMP DEFAULT now())'); print('[DuckDB] Ready'); [time.sleep(1) for _ in iter(int, 1)]"
     networks:
       - ark-net
 
