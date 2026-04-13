@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py aiohttp
+COPY emitters/homeassistant_emitter.py /app/emitter.py
+ENV INSTANCE_ID=homeassistant-0
+ENV NATS_URL=nats://nats:4222
+ENV HA_URL=http://homeassistant:8123
+ENV HA_TOKEN=
+CMD ["python", "/app/emitter.py"]

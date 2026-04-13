@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py aiohttp
+COPY emitters/unifi_emitter.py /app/emitter.py
+ENV INSTANCE_ID=unifi-0
+ENV NATS_URL=nats://nats:4222
+ENV UNIFI_URL=https://unifi:8443
+ENV UNIFI_USERNAME=
+ENV UNIFI_PASSWORD=
+ENV UNIFI_SITE=default
+CMD ["python", "/app/emitter.py"]

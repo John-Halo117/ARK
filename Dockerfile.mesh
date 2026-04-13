@@ -1,0 +1,5 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py aiohttp
+COPY ark/mesh_registry.py /app/mesh_registry.py
+CMD ["python", "/app/mesh_registry.py"]

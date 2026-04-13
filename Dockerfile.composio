@@ -1,0 +1,8 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py
+COPY agents/composio/agent.py /app/agent.py
+ENV INSTANCE_ID=composio-base
+ENV NATS_URL=nats://nats:4222
+ENV COMPOSIO_API_KEY=
+CMD ["python", "/app/agent.py"]

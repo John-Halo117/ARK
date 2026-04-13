@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py aiohttp
+COPY emitters/jellyfin_emitter.py /app/emitter.py
+ENV INSTANCE_ID=jellyfin-0
+ENV NATS_URL=nats://nats:4222
+ENV JELLYFIN_URL=http://jellyfin:8096
+ENV JELLYFIN_TOKEN=
+ENV JELLYFIN_USER_ID=
+CMD ["python", "/app/emitter.py"]

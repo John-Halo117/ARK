@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir nats-py
+COPY agents/openwolf/agent.py /app/agent.py
+ENV INSTANCE_ID=openwolf-base
+ENV NATS_URL=nats://nats:4222
+CMD ["python", "/app/agent.py"]
