@@ -319,15 +319,14 @@ class Autoscaler:
         app.router.add_get('/api/instances/{service}', get_instances_handler)
         app.router.add_post('/api/spawn', spawn_handler)
         
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
+        self._runner = web.AppRunner(app)
+        await self._runner.setup()
+        site = web.TCPSite(self._runner, host, port)
         await site.start()
         logger.info(f"Autoscaler API listening on {host}:{port}")
     
     async def run(self):
         """Main autoscaler loop with graceful shutdown"""
-        runner = None
         try:
             self.shutdown.install_signal_handlers()
             await self._nats.connect()
@@ -346,6 +345,8 @@ class Autoscaler:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
+            if hasattr(self, '_runner') and self._runner:
+                await self._runner.cleanup()
             await self._nats.close()
             logger.info("Autoscaler shutdown complete")
 

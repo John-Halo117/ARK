@@ -140,7 +140,10 @@ class ARKGateway:
             # Route capability
             import aiohttp
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.mesh_url}/api/route/{capability}") as resp:
+                async with session.get(
+                    f"{self.mesh_url}/api/route/{capability}",
+                    timeout=aiohttp.ClientTimeout(total=5),
+                ) as resp:
                     if resp.status != 200:
                         return web.json_response({"error": "No service available"}, status=404)
                     

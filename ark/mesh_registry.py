@@ -334,9 +334,9 @@ class MeshRegistry:
         app.router.add_get('/api/service/{service}', get_service_handler)
         app.router.add_get('/api/route/{capability}', route_capability_handler)
         
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
+        self._runner = web.AppRunner(app)
+        await self._runner.setup()
+        site = web.TCPSite(self._runner, host, port)
         await site.start()
         logger.info(f"Mesh API listening on {host}:{port}")
     
@@ -360,6 +360,8 @@ class MeshRegistry:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
+            if hasattr(self, '_runner') and self._runner:
+                await self._runner.cleanup()
             await self._nats.close()
             logger.info("Mesh registry shutdown complete")
 
