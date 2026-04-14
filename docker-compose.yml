@@ -47,6 +47,7 @@ services:
     container_name: ark-autoscaler
     environment:
       NATS_URL: nats://nats:4222
+      AUTOSCALER_API_KEY: ${AUTOSCALER_API_KEY:-}
       PYTHONUNBUFFERED: "1"
     ports:
       - "7001:7001"
@@ -267,6 +268,7 @@ services:
       UNIFI_USERNAME: ${UNIFI_USERNAME:-}
       UNIFI_PASSWORD: ${UNIFI_PASSWORD:-}
       UNIFI_SITE: ${UNIFI_SITE:-default}
+      UNIFI_CA_BUNDLE: ${UNIFI_CA_BUNDLE:-}
       PYTHONUNBUFFERED: "1"
     ports:
       - "6012:6012"
