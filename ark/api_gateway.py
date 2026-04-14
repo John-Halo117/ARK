@@ -22,7 +22,7 @@ def _safe_int(value: str, default: int, min_val: int = 1, max_val: int = 1000) -
     try:
         n = int(value)
     except (ValueError, TypeError):
-        return default
+        return max(min_val, min(default, max_val))
     return max(min_val, min(n, max_val))
 
 logging.basicConfig(
@@ -188,8 +188,8 @@ class ARKGateway:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(f"{self.mesh_url}/api/mesh") as resp:
                         mesh_data = await resp.json()
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to fetch mesh status: {e}")
             
             # DB status
             db_data = self.db.get_mesh_status()

@@ -60,9 +60,16 @@ class UniFiEmitter:
             # Set UNIFI_CA_BUNDLE to a CA cert path to enable verification.
             ca_bundle = os.environ.get('UNIFI_CA_BUNDLE', '')
             if ca_bundle:
-                import ssl as _ssl
-                ssl_ctx = _ssl.create_default_context(cafile=ca_bundle)
-                connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+                try:
+                    import ssl as _ssl
+                    ssl_ctx = _ssl.create_default_context(cafile=ca_bundle)
+                    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+                except (FileNotFoundError, OSError) as e:
+                    logger.warning(
+                        f"Failed to load CA bundle '{ca_bundle}': {e}. "
+                        "Falling back to SSL verification disabled."
+                    )
+                    connector = aiohttp.TCPConnector(ssl=False)
             else:
                 logger.warning(
                     "SSL verification disabled for UniFi (self-signed cert). "

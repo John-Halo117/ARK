@@ -259,8 +259,9 @@ class Autoscaler:
             if request.method in ('POST', 'PUT', 'DELETE'):
                 api_key = os.environ.get('AUTOSCALER_API_KEY', '')
                 if not api_key:
+                    logger.error("AUTOSCALER_API_KEY not configured — rejecting mutating request")
                     return web.json_response(
-                        {"error": "AUTOSCALER_API_KEY not configured on server"},
+                        {"error": "Server authentication not configured"},
                         status=503
                     )
                 provided = request.headers.get('X-API-Key', '')
