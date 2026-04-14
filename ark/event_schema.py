@@ -1,6 +1,7 @@
 """
 Unified event schema for ARK system
 Used across Python (agents, emitters) and Rust (analysis engine)
+Hardened: field validation, payload size limits, safe serialisation.
 """
 
 from dataclasses import dataclass, asdict
@@ -100,6 +101,53 @@ class ArkEvent:
         )
 
 
+# ---------------------------------------------------------------------------
+# Validation constants
+# ---------------------------------------------------------------------------
+
+MAX_PAYLOAD_BYTES: int = 1_048_576  # 1 MiB
+MAX_EVENT_ID_LEN: int = 128
+MAX_TAG_COUNT: int = 64
+MAX_TAG_KEY_LEN: int = 128
+MAX_TAG_VALUE_LEN: int = 512
+ALLOWED_PHASES = frozenset({"stable", "drift", "unstable", "critical"})
+
+
+def validate_payload(payload: Any, max_bytes: int = MAX_PAYLOAD_BYTES) -> Dict[str, Any]:
+    """Ensure payload is a dict within size budget."""
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError("payload must be a dict")
+    raw = json.dumps(payload, default=str)
+    if len(raw.encode()) > max_bytes:
+        raise ValueError(f"payload exceeds {max_bytes} bytes")
+    return payload
+
+
+def validate_tags(tags: Optional[Dict[str, str]]) -> Dict[str, str]:
+    """Validate and clamp tags dict."""
+    if tags is None:
+        return {}
+    if not isinstance(tags, dict):
+        raise ValueError("tags must be a dict")
+    if len(tags) > MAX_TAG_COUNT:
+        raise ValueError(f"Too many tags (max {MAX_TAG_COUNT})")
+    out: Dict[str, str] = {}
+    for k, v in tags.items():
+        k_str = str(k)[:MAX_TAG_KEY_LEN]
+        v_str = str(v)[:MAX_TAG_VALUE_LEN]
+        out[k_str] = v_str
+    return out
+
+
+def validate_lks_phase(phase: str) -> str:
+    """Validate LKS phase value."""
+    if phase not in ALLOWED_PHASES:
+        raise ValueError(f"Invalid LKS phase: {phase!r}; allowed: {ALLOWED_PHASES}")
+    return phase
+
+
 def create_event(
     event_type: EventType,
     source: EventSource,
@@ -107,13 +155,18 @@ def create_event(
     event_id: Optional[str] = None,
     tags: Optional[Dict[str, str]] = None
 ) -> ArkEvent:
-    """Factory for creating events"""
+    """Factory for creating events with validation."""
     import uuid
+    payload = validate_payload(payload)
+    tags = validate_tags(tags)
+    eid = event_id or str(uuid.uuid4())[:12]
+    if len(eid) > MAX_EVENT_ID_LEN:
+        raise ValueError(f"event_id too long (max {MAX_EVENT_ID_LEN})")
     return ArkEvent(
-        event_id=event_id or str(uuid.uuid4())[:12],
+        event_id=eid,
         event_type=event_type,
         source=source,
         timestamp=int(datetime.utcnow().timestamp()),
         payload=payload,
-        tags=tags or {}
+        tags=tags
     )

@@ -1,10 +1,15 @@
 """
 DuckDB client for Python agents - query/write state, metrics, events
+Hardened: parameterized queries, input validation, size limits.
 """
 
 import duckdb
+import logging
 from typing import List, Dict, Any, Optional
 from ark.event_schema import ArkEvent, LKS
+from ark.security import clamp_limit, sanitize_string, validate_event_id
+
+logger = logging.getLogger("ARK-DuckClient")
 
 
 class DuckClient:
@@ -100,14 +105,14 @@ class DuckClient:
         """, [source, raw, pct, q, vec, timestamp])
     
     def get_latest_lks(self, source: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Query latest LKS for source"""
-        result = self.conn.execute(f"""
-            SELECT source, qts, dsi, dss, phase, timestamp, created_at
-            FROM lks_metrics
-            WHERE source = ?
-            ORDER BY timestamp DESC
-            LIMIT {limit}
-        """, [source]).fetchall()
+        """Query latest LKS for source (parameterized limit)"""
+        safe_limit = clamp_limit(limit, default=10, ceiling=1000)
+        source = sanitize_string(source, 128)
+        result = self.conn.execute(
+            "SELECT source, qts, dsi, dss, phase, timestamp, created_at "
+            "FROM lks_metrics WHERE source = ? ORDER BY timestamp DESC LIMIT ?",
+            [source, safe_limit],
+        ).fetchall()
         
         return [dict(r) for r in result]
     
@@ -120,26 +125,29 @@ class DuckClient:
         return result[0] if result else None
     
     def set_state(self, key: str, value: Dict[str, Any]):
-        """Set state value (upsert)"""
+        """Set state value (upsert) — fixed ON CONFLICT syntax"""
+        key = sanitize_string(key, 256)
         self.conn.execute("""
-            INSERT INTO state (key, value) VALUES (?, ?)
-            ON CONFLICT (key) DO UPDATE SET value = ?, updated_at = CURRENT_TIMESTAMP
-        """, [key, value, value])
+            INSERT INTO state (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+        """, [key, value])
     
     def query_events(self, source: Optional[str] = None, event_type: Optional[str] = None, 
                     limit: int = 100) -> List[Dict[str, Any]]:
-        """Query events with filters"""
+        """Query events with filters (parameterized limit, no f-string injection)"""
+        safe_limit = clamp_limit(limit)
         query = "SELECT * FROM events WHERE 1=1"
-        params = []
+        params: list = []
         
         if source:
             query += " AND source = ?"
-            params.append(source)
+            params.append(sanitize_string(source, 128))
         if event_type:
             query += " AND event_type = ?"
-            params.append(event_type)
+            params.append(sanitize_string(event_type, 64))
         
-        query += f" ORDER BY timestamp DESC LIMIT {limit}"
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(safe_limit)
         
         result = self.conn.execute(query, params).fetchall()
         return [dict(r) for r in result]

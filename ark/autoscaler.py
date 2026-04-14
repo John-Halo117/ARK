@@ -15,6 +15,23 @@ from typing import Dict, List, Any
 import nats
 from nats.errors import Error as NATSError
 
+from ark.security import (
+    build_safe_docker_cmd,
+    sanitize_string,
+    validate_docker_arg,
+    validate_service_name,
+)
+from ark.maintenance import (
+    HealthCheck,
+    ResilientNATSConnection,
+    ShutdownCoordinator,
+)
+from ark.subjects import (
+    SYSTEM_QUEUE_DEPTH_SUBSCRIBE, SYSTEM_LATENCY_SUBSCRIBE,
+    SYSTEM_ASHI, SPAWN_CONFIRMED,
+    parse_service_from_queue_depth,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -29,8 +46,12 @@ class Autoscaler:
                  docker_sock: str = "/var/run/docker.sock"):
         self.nats_url = nats_url
         self.docker_sock = docker_sock
+        self._nats = ResilientNATSConnection(nats_url)
         self.nc = None
         self.js = None
+        self.shutdown = ShutdownCoordinator()
+        self.health = HealthCheck("ark-autoscaler")
+        self.health.register("nats", lambda: self._nats.is_connected)
         
         # Spawn config
         self.spawn_config = {
@@ -71,25 +92,20 @@ class Autoscaler:
         logger.info("ARK Autoscaler initialized")
     
     async def connect(self):
-        """Connect to NATS"""
-        try:
-            self.nc = await nats.connect(self.nats_url)
-            self.js = self.nc.jetstream()
-            logger.info(f"Connected to NATS at {self.nats_url}")
-        except NATSError as e:
-            logger.error(f"Failed to connect to NATS: {e}")
-            raise
+        """Connect to NATS with resilient reconnection"""
+        self.nc = await self._nats.connect()
+        self.js = self._nats.js
+        logger.info("Connected to NATS at %s", self.nats_url)
     
     async def monitor_demand(self):
         """Listen for demand signals"""
         try:
-            sub = await self.nc.subscribe("ark.system.queue_depth.*")
+            sub = await self.nc.subscribe(SYSTEM_QUEUE_DEPTH_SUBSCRIBE)
             logger.info("Subscribed to demand signals")
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    service = subject_parts[-1] if len(subject_parts) > 3 else "unknown"
+                    service = parse_service_from_queue_depth(msg.subject)
                     
                     event = json.loads(msg.data.decode())
                     depth = event.get('depth', 0)
@@ -108,12 +124,11 @@ class Autoscaler:
     async def monitor_latency(self):
         """Listen for latency signals"""
         try:
-            sub = await self.nc.subscribe("ark.system.latency.*")
+            sub = await self.nc.subscribe(SYSTEM_LATENCY_SUBSCRIBE)
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    service = subject_parts[-1] if len(subject_parts) > 3 else "unknown"
+                    service = parse_service_from_queue_depth(msg.subject)
                     
                     event = json.loads(msg.data.decode())
                     latency = event.get('latency_ms', 0)
@@ -152,9 +167,14 @@ class Autoscaler:
             await self.terminate_instance(service)
     
     async def spawn_instance(self, service: str) -> str:
-        """Spawn a new service instance"""
+        """Spawn a new service instance with hardened docker invocation"""
+        try:
+            validate_service_name(service)
+        except ValueError:
+            logger.error("Invalid service name: %s", service)
+            return ""
         if service not in self.spawn_config:
-            logger.error(f"Unknown service: {service}")
+            logger.error("Unknown service: %s", service)
             return ""
         
         config = self.spawn_config[service]
@@ -162,18 +182,18 @@ class Autoscaler:
         container_name = f"ark-{service}-{instance_id}"
         
         try:
-            # Build docker run command
-            cmd = [
-                "docker", "run", "-d",
-                "--name", container_name,
-                f"--cpus={config['cpu_limit']}",
-                f"--memory={config['memory_limit']}",
-                "-e", f"INSTANCE_ID={instance_id}",
-                "-e", f"SERVICE_NAME={service}",
-                "-e", f"NATS_URL={self.nats_url}",
-                "--network", "ark-net",
-                config['image']
-            ]
+            cmd = build_safe_docker_cmd(
+                image=config['image'],
+                container_name=container_name,
+                cpu_limit=config['cpu_limit'],
+                memory_limit=config['memory_limit'],
+                env={
+                    "INSTANCE_ID": instance_id,
+                    "SERVICE_NAME": service,
+                    "NATS_URL": self.nats_url,
+                },
+                network="ark-net",
+            )
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             
@@ -188,7 +208,7 @@ class Autoscaler:
                 logger.info(f"Spawned {service}/{instance_id}: {container_id}")
                 
                 # Publish spawn event
-                await self.js.publish("ark.spawn.confirmed", json.dumps({
+                await self.js.publish(SPAWN_CONFIRMED, json.dumps({
                     "service": service,
                     "instance_id": instance_id,
                     "container_id": container_id,
@@ -205,7 +225,7 @@ class Autoscaler:
             return ""
     
     async def terminate_instance(self, service: str):
-        """Terminate an idle service instance"""
+        """Terminate an idle service instance safely"""
         instances = self.service_instances.get(service, [])
         if not instances:
             return
@@ -213,14 +233,17 @@ class Autoscaler:
         container_id = instances.pop()
         
         try:
+            # Validate container_id to prevent injection
+            validate_docker_arg(container_id)
             cmd = ["docker", "stop", container_id]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0:
-                logger.info(f"Terminated {service}: {container_id}")
-                
-                # Also remove container
-                subprocess.run(["docker", "rm", container_id], timeout=5)
+                logger.info("Terminated %s: %s", service, container_id)
+                subprocess.run(
+                    ["docker", "rm", container_id],
+                    capture_output=True, text=True, timeout=5,
+                )
         
         except Exception as e:
             logger.error(f"Termination error for {service}: {e}")
@@ -228,7 +251,7 @@ class Autoscaler:
     async def monitor_ashi(self):
         """Listen for ASHI (System Health Index) degradation signals"""
         try:
-            sub = await self.nc.subscribe("ark.system.ashi")
+            sub = await self.nc.subscribe(SYSTEM_ASHI)
             logger.info("Subscribed to ASHI signals")
             
             async for msg in sub.messages:
@@ -248,11 +271,24 @@ class Autoscaler:
             logger.error(f"Subscription error: {e}")
     
     async def expose_api(self, host: str = "0.0.0.0", port: int = 7001):
-        """Expose REST API for autoscaler control"""
+        """Expose REST API for autoscaler control with auth"""
         from aiohttp import web
+        from ark.security import (
+            auth_middleware,
+            error_shield_middleware,
+            rate_limit_middleware,
+            secure_headers_middleware,
+        )
         
+        async def get_health_handler(request):
+            return web.json_response(self.health.check())
+
         async def get_instances_handler(request):
             service = request.match_info.get('service', '')
+            try:
+                validate_service_name(service)
+            except ValueError:
+                return web.json_response({"error": "invalid service name"}, status=400)
             instances = self.service_instances.get(service, [])
             return web.json_response({
                 "service": service,
@@ -262,7 +298,11 @@ class Autoscaler:
         
         async def spawn_handler(request):
             data = await request.json()
-            service = data.get('service')
+            service = data.get('service', '')
+            try:
+                validate_service_name(service)
+            except ValueError:
+                return web.json_response({"error": "invalid service name"}, status=400)
             container_id = await self.spawn_instance(service)
             return web.json_response({
                 "service": service,
@@ -270,20 +310,31 @@ class Autoscaler:
                 "success": bool(container_id)
             })
         
-        app = web.Application()
+        app = web.Application(
+            middlewares=[
+                error_shield_middleware,
+                secure_headers_middleware,
+                rate_limit_middleware,
+                auth_middleware,
+            ]
+        )
+        app.router.add_get('/api/health', get_health_handler)
         app.router.add_get('/api/instances/{service}', get_instances_handler)
         app.router.add_post('/api/spawn', spawn_handler)
         
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
+        self._runner = web.AppRunner(app)
+        await self._runner.setup()
+        site = web.TCPSite(self._runner, host, port)
         await site.start()
         logger.info(f"Autoscaler API listening on {host}:{port}")
     
     async def run(self):
-        """Main autoscaler loop"""
+        """Main autoscaler loop with graceful shutdown"""
         try:
-            await self.connect()
+            self.shutdown.install_signal_handlers()
+            await self._nats.connect()
+            self.nc = self._nats.nc
+            self.js = self._nats.js
             await self.expose_api()
             
             logger.info("ARK Autoscaler started")
@@ -297,8 +348,10 @@ class Autoscaler:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
-            if self.nc:
-                await self.nc.close()
+            if hasattr(self, '_runner') and self._runner:
+                await self._runner.cleanup()
+            await self._nats.close()
+            logger.info("Autoscaler shutdown complete")
 
 
 async def main():

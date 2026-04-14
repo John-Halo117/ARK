@@ -16,6 +16,12 @@ import aiohttp
 import nats
 from nats.errors import Error as NATSError
 
+from ark.subjects import (
+    MESH_REGISTER, MESH_HEARTBEAT,
+    EVENT_MEDIA_PLAYBACK, METRICS_MEDIA_DURATION,
+    call_subscribe_subject, reply_subject, parse_capability_from_subject,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -75,7 +81,7 @@ class JellyfinEmitter:
             "ttl": 10
         }
         
-        await self.nc.publish("ark.mesh.register", json.dumps(event).encode())
+        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -84,7 +90,7 @@ class JellyfinEmitter:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish("ark.mesh.heartbeat", json.dumps({
+                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.event_count / 100.0,
@@ -190,12 +196,12 @@ class JellyfinEmitter:
                 "source": "jellyfin"
             }
             
-            await self.js.publish("ark.event.media.playback", json.dumps(event).encode())
+            await self.js.publish(EVENT_MEDIA_PLAYBACK, json.dumps(event).encode())
             
             # Also emit metric for duration if available
             duration = item.get('RunTimeTicks', 0)
             if duration:
-                await self.js.publish("ark.metrics.media_duration", json.dumps({
+                await self.js.publish(METRICS_MEDIA_DURATION, json.dumps({
                     "name": f"media.{media_type}",
                     "value": duration / 10000000,  # Convert ticks to seconds
                     "unit": "seconds",
@@ -223,7 +229,7 @@ class JellyfinEmitter:
                 "source": "jellyfin"
             }
             
-            await self.js.publish("ark.event.media.playback", json.dumps(event).encode())
+            await self.js.publish(EVENT_MEDIA_PLAYBACK, json.dumps(event).encode())
             
             logger.info(f"Playback changed: {device} → {title}")
             self.event_count += 1
@@ -242,7 +248,7 @@ class JellyfinEmitter:
                 "source": "jellyfin"
             }
             
-            await self.js.publish("ark.event.media.playback", json.dumps(event).encode())
+            await self.js.publish(EVENT_MEDIA_PLAYBACK, json.dumps(event).encode())
             
             logger.info(f"Playback stopped: {device}")
             self.event_count += 1
@@ -253,13 +259,12 @@ class JellyfinEmitter:
     async def subscribe_capability_requests(self):
         """Subscribe to capability requests for Jellyfin operations"""
         try:
-            sub = await self.nc.subscribe(f"ark.call.{self.service_name}.*")
+            sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
             logger.info("Subscribed to capability requests")
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    capability = subject_parts[-1] if len(subject_parts) >= 4 else "unknown"
+                    capability = parse_capability_from_subject(msg.subject)
                     
                     request = json.loads(msg.data.decode())
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
@@ -269,8 +274,7 @@ class JellyfinEmitter:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    reply_topic = f"ark.reply.{request_id}"
-                    await self.js.publish(reply_topic, json.dumps(result).encode())
+                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
                     
                     self.event_count += 1
                 

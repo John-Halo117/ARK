@@ -14,6 +14,20 @@ from typing import Dict, List, Any, Optional
 import nats
 from nats.errors import Error as NATSError
 
+from ark.security import (
+    registration_rate_limiter,
+    sanitize_string,
+    validate_capability,
+    validate_instance_id,
+    validate_service_name,
+)
+from ark.maintenance import (
+    HealthCheck,
+    ResilientNATSConnection,
+    ShutdownCoordinator,
+)
+from ark.subjects import MESH_REGISTER, MESH_HEARTBEAT, MESH_REGISTERED
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -60,8 +74,12 @@ class MeshRegistry:
     
     def __init__(self, nats_url: str = "nats://nats:4222"):
         self.nats_url = nats_url
+        self._nats = ResilientNATSConnection(nats_url)
         self.nc = None
         self.js = None
+        self.shutdown = ShutdownCoordinator()
+        self.health = HealthCheck("ark-mesh-registry")
+        self.health.register("nats", lambda: self._nats.is_connected)
         
         # Registry: service -> instance_id -> ServiceInstance
         self.registry: Dict[str, Dict[str, ServiceInstance]] = {}
@@ -75,20 +93,16 @@ class MeshRegistry:
         logger.info("ARK Mesh Registry initialized")
     
     async def connect(self):
-        """Connect to NATS"""
-        try:
-            self.nc = await nats.connect(self.nats_url)
-            self.js = self.nc.jetstream()
-            logger.info(f"Connected to NATS at {self.nats_url}")
-        except NATSError as e:
-            logger.error(f"Failed to connect to NATS: {e}")
-            raise
+        """Connect to NATS with resilient reconnection"""
+        self.nc = await self._nats.connect()
+        self.js = self._nats.js
+        logger.info("Connected to NATS at %s", self.nats_url)
     
     async def subscribe_registrations(self):
         """Listen for service registrations"""
         try:
-            sub = await self.nc.subscribe("ark.mesh.register")
-            logger.info("Subscribed to ark.mesh.register")
+            sub = await self.nc.subscribe(MESH_REGISTER)
+            logger.info("Subscribed to %s", MESH_REGISTER)
             
             async for msg in sub.messages:
                 try:
@@ -101,47 +115,69 @@ class MeshRegistry:
             logger.error(f"Subscription error: {e}")
     
     async def handle_registration(self, event: Dict[str, Any]):
-        """Register or update a service instance"""
-        service = event.get('service')
-        instance_id = event.get('instance_id')
+        """Register or update a service instance with input validation"""
+        service = event.get('service', '')
+        instance_id = event.get('instance_id', '')
         capabilities = event.get('capabilities', [])
         ttl = event.get('ttl', 10)
         metadata = event.get('metadata', {})
         
-        if not service or not instance_id:
-            logger.warning(f"Invalid registration: {event}")
+        # --- Validation ---
+        try:
+            validate_service_name(service)
+            validate_instance_id(instance_id)
+        except ValueError as exc:
+            logger.warning("Invalid registration rejected: %s", exc)
             return
+
+        if not isinstance(capabilities, list) or len(capabilities) > 64:
+            logger.warning("Invalid capabilities in registration from %s/%s", service, instance_id)
+            return
+
+        safe_caps = []
+        for cap in capabilities:
+            try:
+                safe_caps.append(validate_capability(cap))
+            except ValueError:
+                logger.warning("Skipping invalid capability: %s", cap)
+
+        # Rate-limit per service
+        if not registration_rate_limiter.allow(service):
+            logger.warning("Registration rate-limited for %s", service)
+            return
+
+        ttl = max(5, min(int(ttl), 300))  # clamp 5-300s
         
         # Store instance
         if service not in self.registry:
             self.registry[service] = {}
         
         self.registry[service][instance_id] = ServiceInstance(
-            service, instance_id, capabilities, metadata, ttl
+            service, instance_id, safe_caps, metadata, ttl
         )
         
         # Update capability index
-        for capability in capabilities:
+        for capability in safe_caps:
             if capability not in self.capability_index:
                 self.capability_index[capability] = []
             if instance_id not in self.capability_index[capability]:
                 self.capability_index[capability].append(instance_id)
         
-        logger.info(f"Registered {service}/{instance_id}: {capabilities}")
+        logger.info("Registered %s/%s: %s", service, instance_id, safe_caps)
         
         # Publish registration event
-        await self.js.publish("ark.mesh.registered", json.dumps({
+        await self.js.publish(MESH_REGISTERED, json.dumps({
             "service": service,
             "instance_id": instance_id,
-            "capabilities": capabilities,
+            "capabilities": safe_caps,
             "timestamp": datetime.utcnow().isoformat()
         }).encode())
     
     async def subscribe_heartbeats(self):
         """Listen for service heartbeats"""
         try:
-            sub = await self.nc.subscribe("ark.mesh.heartbeat")
-            logger.info("Subscribed to ark.mesh.heartbeat")
+            sub = await self.nc.subscribe(MESH_HEARTBEAT)
+            logger.info("Subscribed to %s", MESH_HEARTBEAT)
             
             async for msg in sub.messages:
                 try:
@@ -176,11 +212,11 @@ class MeshRegistry:
                         del instances[instance_id]
                         logger.info(f"Removed expired: {service}/{instance_id}")
             
-            # Clean capability index
+            # Clean capability index — keep only instance IDs that still exist
             for capability in list(self.capability_index.keys()):
                 self.capability_index[capability] = [
                     iid for iid in self.capability_index[capability]
-                    if not any(iid in insts for insts in self.registry.values())
+                    if any(iid in insts for insts in self.registry.values())
                 ]
                 if not self.capability_index[capability]:
                     del self.capability_index[capability]
@@ -254,9 +290,18 @@ class MeshRegistry:
         }
     
     async def expose_api(self, host: str = "0.0.0.0", port: int = 7000):
-        """Expose REST API for mesh queries"""
+        """Expose REST API for mesh queries with security middleware"""
         from aiohttp import web
+        from ark.security import (
+            auth_middleware,
+            error_shield_middleware,
+            rate_limit_middleware,
+            secure_headers_middleware,
+        )
         
+        async def get_health_handler(request):
+            return web.json_response(self.health.check())
+
         async def get_mesh_status_handler(request):
             status = await self.get_mesh_status()
             return web.json_response(status)
@@ -277,21 +322,32 @@ class MeshRegistry:
                 })
             return web.json_response({"error": "No instances available"}, status=404)
         
-        app = web.Application()
+        app = web.Application(
+            middlewares=[
+                error_shield_middleware,
+                secure_headers_middleware,
+                rate_limit_middleware,
+                auth_middleware,
+            ]
+        )
+        app.router.add_get('/api/health', get_health_handler)
         app.router.add_get('/api/mesh', get_mesh_status_handler)
         app.router.add_get('/api/service/{service}', get_service_handler)
         app.router.add_get('/api/route/{capability}', route_capability_handler)
         
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, host, port)
+        self._runner = web.AppRunner(app)
+        await self._runner.setup()
+        site = web.TCPSite(self._runner, host, port)
         await site.start()
         logger.info(f"Mesh API listening on {host}:{port}")
     
     async def run(self):
-        """Main registry loop"""
+        """Main registry loop with graceful shutdown"""
         try:
-            await self.connect()
+            self.shutdown.install_signal_handlers()
+            await self._nats.connect()
+            self.nc = self._nats.nc
+            self.js = self._nats.js
             await self.expose_api()
             
             logger.info("ARK Mesh Registry started")
@@ -305,8 +361,10 @@ class MeshRegistry:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
-            if self.nc:
-                await self.nc.close()
+            if hasattr(self, '_runner') and self._runner:
+                await self._runner.cleanup()
+            await self._nats.close()
+            logger.info("Mesh registry shutdown complete")
 
 
 async def main():

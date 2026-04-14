@@ -15,6 +15,13 @@ from typing import Dict, Any
 import nats
 from nats.errors import Error as NATSError
 
+from ark.security import sanitize_string, validate_payload, safe_log_event, redact_dict
+from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
+from ark.subjects import (
+    MESH_REGISTER, MESH_HEARTBEAT,
+    call_subscribe_subject, reply_subject, parse_capability_from_subject,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -43,18 +50,19 @@ class ComposioBridge:
         self.nc = None
         self.js = None
         self.request_count = 0
+        self._nats = ResilientNATSConnection(self.nats_url)
+        self.shutdown = ShutdownCoordinator()
+        self.health = HealthCheck(self.service_name)
+        self.health.register("nats", lambda: self._nats.is_connected)
+        self.health.register("composio_api", lambda: bool(self.composio_api_key))
         
-        logger.info(f"ComposioBridge initialized (instance={self.instance_id})")
+        logger.info("ComposioBridge initialized (instance=%s)", self.instance_id)
     
     async def connect(self):
-        """Connect to NATS"""
-        try:
-            self.nc = await nats.connect(self.nats_url)
-            self.js = self.nc.jetstream()
-            logger.info(f"Connected to NATS")
-        except NATSError as e:
-            logger.error(f"Connection failed: {e}")
-            raise
+        """Connect to NATS with resilient reconnection"""
+        self.nc = await self._nats.connect()
+        self.js = self._nats.js
+        logger.info("Connected to NATS")
     
     async def register(self):
         """Register with mesh"""
@@ -70,7 +78,7 @@ class ComposioBridge:
             "ttl": 10
         }
         
-        await self.nc.publish("ark.mesh.register", json.dumps(event).encode())
+        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -79,7 +87,7 @@ class ComposioBridge:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish("ark.mesh.heartbeat", json.dumps({
+                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.request_count / 100.0,
@@ -95,13 +103,12 @@ class ComposioBridge:
     async def subscribe_calls(self):
         """Subscribe to capability calls"""
         try:
-            sub = await self.nc.subscribe(f"ark.call.{self.service_name}.*")
+            sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
             logger.info(f"Subscribed to capability calls")
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    capability = subject_parts[-1] if len(subject_parts) >= 4 else "unknown"
+                    capability = parse_capability_from_subject(msg.subject)
                     
                     request = json.loads(msg.data.decode())
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
@@ -111,8 +118,7 @@ class ComposioBridge:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    reply_topic = f"ark.reply.{request_id}"
-                    await self.js.publish(reply_topic, json.dumps(result).encode())
+                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
                     
                     self.request_count += 1
                     
@@ -140,10 +146,10 @@ class ComposioBridge:
             return {"error": f"Unknown capability: {capability}"}
     
     async def send_email(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Send email via Composio"""
-        to = params.get('to', '')
-        subject = params.get('subject', '')
-        body = params.get('body', '')
+        """Send email via Composio (sanitize recipient info for logging)"""
+        to = sanitize_string(params.get('to', ''), 256)
+        subject = sanitize_string(params.get('subject', ''), 256)
+        body = sanitize_string(params.get('body', ''), 10_000)
         
         result = {
             "agent": self.service_name,
@@ -161,8 +167,8 @@ class ComposioBridge:
     
     async def github_action(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute GitHub action via Composio"""
-        action = params.get('action', '')
-        repo = params.get('repo', '')
+        action = sanitize_string(params.get('action', ''), 128)
+        repo = sanitize_string(params.get('repo', ''), 256)
         
         result = {
             "agent": self.service_name,
@@ -180,8 +186,8 @@ class ComposioBridge:
     
     async def slack_message(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Send Slack message via Composio"""
-        channel = params.get('channel', '')
-        message = params.get('message', '')
+        channel = sanitize_string(params.get('channel', ''), 128)
+        message = sanitize_string(params.get('message', ''), 4_000)
         
         result = {
             "agent": self.service_name,
@@ -199,8 +205,8 @@ class ComposioBridge:
     
     async def notion_action(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute Notion action via Composio"""
-        action = params.get('action', '')
-        database = params.get('database', '')
+        action = sanitize_string(params.get('action', ''), 128)
+        database = sanitize_string(params.get('database', ''), 256)
         
         result = {
             "agent": self.service_name,
@@ -217,7 +223,7 @@ class ComposioBridge:
     
     async def calendar_action(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute calendar action via Composio"""
-        action = params.get('action', '')
+        action = sanitize_string(params.get('action', ''), 128)
         
         result = {
             "agent": self.service_name,
@@ -233,8 +239,8 @@ class ComposioBridge:
     
     async def crm_action(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute CRM action via Composio"""
-        action = params.get('action', '')
-        entity = params.get('entity', '')
+        action = sanitize_string(params.get('action', ''), 128)
+        entity = sanitize_string(params.get('entity', ''), 256)
         
         result = {
             "agent": self.service_name,
@@ -250,8 +256,9 @@ class ComposioBridge:
         return result
     
     async def run(self):
-        """Main agent loop"""
+        """Main agent loop with graceful shutdown"""
         try:
+            self.shutdown.install_signal_handlers()
             await self.connect()
             await self.register()
             
@@ -265,8 +272,7 @@ class ComposioBridge:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
-            if self.nc:
-                await self.nc.close()
+            await self._nats.close()
 
 
 async def main():

@@ -15,6 +15,13 @@ from typing import Dict, Any, List
 import nats
 from nats.errors import Error as NATSError
 
+from ark.security import sanitize_string, validate_payload, safe_log_event
+from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
+from ark.subjects import (
+    MESH_REGISTER, MESH_HEARTBEAT,
+    call_subscribe_subject, reply_subject, parse_capability_from_subject,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -41,18 +48,18 @@ class OpenCodeAgent:
         self.nc = None
         self.js = None
         self.request_count = 0
+        self._nats = ResilientNATSConnection(self.nats_url)
+        self.shutdown = ShutdownCoordinator()
+        self.health = HealthCheck(self.service_name)
+        self.health.register("nats", lambda: self._nats.is_connected)
         
-        logger.info(f"OpenCode initialized (instance={self.instance_id})")
+        logger.info("OpenCode initialized (instance=%s)", self.instance_id)
     
     async def connect(self):
-        """Connect to NATS"""
-        try:
-            self.nc = await nats.connect(self.nats_url)
-            self.js = self.nc.jetstream()
-            logger.info(f"Connected to NATS")
-        except NATSError as e:
-            logger.error(f"Connection failed: {e}")
-            raise
+        """Connect to NATS with resilient reconnection"""
+        self.nc = await self._nats.connect()
+        self.js = self._nats.js
+        logger.info("Connected to NATS")
     
     async def register(self):
         """Register with mesh"""
@@ -67,7 +74,7 @@ class OpenCodeAgent:
             "ttl": 10
         }
         
-        await self.nc.publish("ark.mesh.register", json.dumps(event).encode())
+        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -76,7 +83,7 @@ class OpenCodeAgent:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish("ark.mesh.heartbeat", json.dumps({
+                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.request_count / 100.0,  # Simple load metric
@@ -93,14 +100,13 @@ class OpenCodeAgent:
     async def subscribe_calls(self):
         """Subscribe to capability calls"""
         try:
-            sub = await self.nc.subscribe(f"ark.call.{self.service_name}.*")
+            sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
             logger.info(f"Subscribed to capability calls")
             
             async for msg in sub.messages:
                 try:
-                    # Parse subject: ark.call.opencode.<capability>
-                    subject_parts = msg.subject.split('.')
-                    capability = subject_parts[-1] if len(subject_parts) >= 4 else "unknown"
+                    # e.g. ark.call.opencode.code.analyze -> capability = "code.analyze"
+                    capability = parse_capability_from_subject(msg.subject)
                     
                     request = json.loads(msg.data.decode())
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
@@ -112,8 +118,7 @@ class OpenCodeAgent:
                     result = await self.handle_capability(capability, params)
                     
                     # Reply with result
-                    reply_topic = f"ark.reply.{request_id}"
-                    await self.js.publish(reply_topic, json.dumps(result).encode())
+                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
                     
                     self.request_count += 1
                     
@@ -140,8 +145,8 @@ class OpenCodeAgent:
     
     async def analyze_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze code for patterns, quality, security"""
-        source = params.get('source', '')
-        language = params.get('language', 'python')
+        source = sanitize_string(params.get('source', ''), 100_000)
+        language = sanitize_string(params.get('language', 'python'), 32)
         
         result = {
             "agent": self.service_name,
@@ -165,8 +170,8 @@ class OpenCodeAgent:
     
     async def transform_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Transform code (refactor, migrate, optimize)"""
-        source = params.get('source', '')
-        transform_type = params.get('type', 'refactor')
+        source = sanitize_string(params.get('source', ''), 100_000)
+        transform_type = sanitize_string(params.get('type', 'refactor'), 32)
         
         result = {
             "agent": self.service_name,
@@ -183,8 +188,8 @@ class OpenCodeAgent:
     
     async def generate_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate code from specification"""
-        spec = params.get('spec', '')
-        language = params.get('language', 'python')
+        spec = sanitize_string(params.get('spec', ''), 10_000)
+        language = sanitize_string(params.get('language', 'python'), 32)
         
         result = {
             "agent": self.service_name,
@@ -201,7 +206,7 @@ class OpenCodeAgent:
     
     async def plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create execution plan for goal"""
-        goal = params.get('goal', '')
+        goal = sanitize_string(params.get('goal', ''), 2_000)
         
         result = {
             "agent": self.service_name,
@@ -221,7 +226,7 @@ class OpenCodeAgent:
     
     async def decompose(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Decompose problem into sub-tasks"""
-        problem = params.get('problem', '')
+        problem = sanitize_string(params.get('problem', ''), 2_000)
         
         result = {
             "agent": self.service_name,
@@ -237,8 +242,9 @@ class OpenCodeAgent:
         return result
     
     async def run(self):
-        """Main agent loop"""
+        """Main agent loop with graceful shutdown"""
         try:
+            self.shutdown.install_signal_handlers()
             await self.connect()
             await self.register()
             
@@ -252,8 +258,7 @@ class OpenCodeAgent:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
-            if self.nc:
-                await self.nc.close()
+            await self._nats.close()
 
 
 async def main():
