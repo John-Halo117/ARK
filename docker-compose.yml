@@ -313,19 +313,13 @@ services:
     networks:
       - ark-net
 
-  # STORAGE - MinIO
-  minio:
-    image: minio/minio:latest
-    container_name: ark-minio
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+  # STORAGE - Local filesystem
+  storage:
+    image: busybox:latest
+    container_name: ark-storage
     volumes:
-      - minio_data:/minio/data
-    command: server /minio/data --console-address ":9001"
+      - ark_storage:/data
+    command: ["sh", "-c", "mkdir -p /data/uploads /data/exports /data/backups && echo 'Storage ready' && tail -f /dev/null"]
     networks:
       - ark-net
 
@@ -365,7 +359,7 @@ volumes:
   duckdb_data:
   n8n_data:
   ha_data:
-  minio_data:
+  ark_storage:
   grafana_data:
   meilisearch_data:
   jellyfin_data:
