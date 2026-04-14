@@ -31,6 +31,7 @@
 | Home Assistant | 8123 | http://localhost:8123 |
 | Jellyfin | 8096 | http://localhost:8096 |
 | UniFi Controller | 8443 | https://localhost:8443 |
+| UniFi HTTP (remapped) | 8880 | http://localhost:8880 |
 
 ## STORAGE & OBSERVABILITY
 | Service | Port | URL |
@@ -50,6 +51,7 @@
 ## API GATEWAY ENDPOINTS (Primary Entry Point)
 
 ```
+GET  http://localhost:8080/api/health             # Liveness / readiness probe
 GET  http://localhost:8080/api/status              # System health
 GET  http://localhost:8080/api/mesh                # Mesh registry status
 GET  http://localhost:8080/api/service/{name}      # Service details
@@ -63,19 +65,19 @@ GET  http://localhost:8080/api/metrics/{source}    # Get LKS metrics
 
 | Dashboard | URL | Credentials |
 |-----------|-----|-------------|
-| Grafana | http://localhost:3000 | admin / admin |
+| Grafana | http://localhost:3000 | See `GF_ADMIN_PASSWORD` in `.env` |
 | n8n | http://localhost:5678 | (first run setup) |
 | Home Assistant | http://localhost:8123 | (first run setup) |
 | Jellyfin | http://localhost:8096 | (first run setup) |
-| MinIO | http://localhost:9001 | minioadmin / minioadmin |
+| MinIO | http://localhost:9001 | See `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in `.env` |
 | UniFi | https://localhost:8443 | (first run setup) |
 
 ---
 
 ## TOTAL DEPLOYMENT
 
-- **25 Services**
-- **27 Published Ports**
+- **17 Services**
+- **28 Published Ports**
 - **1 Primary Gateway** (http://localhost:8080)
 - **Unified Event Schema** (Python + Rust)
 - **DuckDB SSOT** (Single Source of Truth)
@@ -85,15 +87,19 @@ GET  http://localhost:8080/api/metrics/{source}    # Get LKS metrics
 ## START HERE
 
 ```bash
-# 1. Start core stack
+# 1. Copy env template and fill in secrets
+cp .env.example .env
+# Edit .env with your passwords for MinIO, Grafana, Meilisearch
+
+# 2. Start core stack
 docker-compose up -d nats mesh-registry autoscaler duckdb gateway
 
-# 2. Check status
+# 3. Check status
 curl http://localhost:8080/api/status
 
-# 3. View mesh
+# 4. View mesh
 curl http://localhost:8080/api/mesh
 
-# 4. Start all (optional - includes large images)
+# 5. Start all (optional - includes large images)
 docker-compose up -d
 ```

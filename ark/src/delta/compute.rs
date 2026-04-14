@@ -10,7 +10,13 @@ pub struct Delta {
 
 pub fn compute(prev: &LKS, curr: &LKS) -> Delta {
     let raw = curr.dss - prev.dss;
-    let pct = if prev.dss != 0.0 { raw / prev.dss } else { 0.0 };
+    let pct = if prev.dss != 0.0 {
+        raw / prev.dss
+    } else if raw != 0.0 {
+        f32::INFINITY.copysign(raw)
+    } else {
+        0.0
+    };
 
     let q = match raw {
         x if x > 0.15 => 2,

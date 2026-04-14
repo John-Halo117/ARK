@@ -62,8 +62,26 @@ class UniFiEmitter:
     async def connect(self):
         """Connect to NATS and authenticate with UniFi"""
         try:
-            # Create session with SSL verification disabled (UniFi uses self-signed certs)
-            connector = aiohttp.TCPConnector(ssl=False)
+            # UniFi controllers typically use self-signed certificates.
+            # Set UNIFI_CA_BUNDLE to a CA cert path to enable verification.
+            ca_bundle = os.environ.get('UNIFI_CA_BUNDLE', '')
+            if ca_bundle:
+                try:
+                    import ssl as _ssl
+                    ssl_ctx = _ssl.create_default_context(cafile=ca_bundle)
+                    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+                except (FileNotFoundError, OSError) as e:
+                    logger.warning(
+                        f"UNIFI_CA_BUNDLE path '{ca_bundle}' is invalid ({e}). "
+                        "Falling back to SSL verification disabled."
+                    )
+                    connector = aiohttp.TCPConnector(ssl=False)
+            else:
+                logger.warning(
+                    "SSL verification disabled for UniFi (self-signed cert). "
+                    "Set UNIFI_CA_BUNDLE to a CA cert path to enable verification."
+                )
+                connector = aiohttp.TCPConnector(ssl=False)
             self.session = aiohttp.ClientSession(connector=connector)
             
             self.nc = await nats.connect(self.nats_url)

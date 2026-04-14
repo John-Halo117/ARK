@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 from typing import Dict, Any, Optional
 
+import aiohttp
 import nats
 from aiohttp import web
 from ark.duck_client import DuckClient
@@ -55,13 +56,25 @@ class ARKGateway:
         self.health = HealthCheck("ark-gateway")
         self.health.register("nats", lambda: self._nats.is_connected)
         self.health.register("db", lambda: self.db.conn is not None)
+        self._http_session: Optional[aiohttp.ClientSession] = None
         
         logger.info("ARK Gateway initialized")
+    
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create a reusable HTTP session."""
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=5)
+            )
+        return self._http_session
     
     async def connect(self):
         """Connect to NATS with resilient reconnection"""
         self.nc = await self._nats.connect()
         self.js = self._nats.js
+        self._http_session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=5)
+        )
         logger.info("Connected to NATS")
     
     async def handle_health(self, request: web.Request) -> web.Response:
@@ -73,14 +86,10 @@ class ARKGateway:
     async def handle_mesh_status(self, request: web.Request) -> web.Response:
         """GET /api/mesh - Get mesh registry status"""
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.mesh_url}/api/mesh",
-                    timeout=aiohttp.ClientTimeout(total=5),
-                ) as resp:
-                    data = await resp.json()
-                    return web.json_response(data)
+            session = await self._get_session()
+            async with session.get(f"{self.mesh_url}/api/mesh") as resp:
+                data = await resp.json()
+                return web.json_response(data)
         except Exception:
             logger.exception("Mesh query error")
             return web.json_response({"error": "mesh unavailable"}, status=502)
@@ -93,14 +102,10 @@ class ARKGateway:
         except ValueError:
             return web.json_response({"error": "invalid service name"}, status=400)
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.mesh_url}/api/service/{service}",
-                    timeout=aiohttp.ClientTimeout(total=5),
-                ) as resp:
-                    data = await resp.json()
-                    return web.json_response(data)
+            session = await self._get_session()
+            async with session.get(f"{self.mesh_url}/api/service/{service}") as resp:
+                data = await resp.json()
+                return web.json_response(data)
         except Exception:
             logger.exception("Service info error for %s", service)
             return web.json_response({"error": "service query failed"}, status=502)
@@ -113,14 +118,10 @@ class ARKGateway:
         except ValueError:
             return web.json_response({"error": "invalid capability"}, status=400)
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.mesh_url}/api/route/{capability}",
-                    timeout=aiohttp.ClientTimeout(total=5),
-                ) as resp:
-                    data = await resp.json()
-                    return web.json_response(data)
+            session = await self._get_session()
+            async with session.get(f"{self.mesh_url}/api/route/{capability}") as resp:
+                data = await resp.json()
+                return web.json_response(data)
         except Exception:
             logger.exception("Route capability error for %s", capability)
             return web.json_response({"error": "routing failed"}, status=502)
@@ -139,16 +140,11 @@ class ARKGateway:
             params = validate_payload(body.get('params', {}))
             
             # Route capability
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.mesh_url}/api/route/{capability}",
-                    timeout=aiohttp.ClientTimeout(total=5),
-                ) as resp:
-                    if resp.status != 200:
-                        return web.json_response({"error": "No service available"}, status=404)
-                    
-                    route = await resp.json()
+            session = await self._get_session()
+            async with session.get(f"{self.mesh_url}/api/route/{capability}") as resp:
+                if resp.status != 200:
+                    return web.json_response({"error": "No service available"}, status=404)
+                route = await resp.json()
             
             service = route.get('service')
             instance_id = route.get('instance_id')
@@ -225,15 +221,11 @@ class ARKGateway:
         """GET /api/status - Overall system status"""
         try:
             # Mesh status
-            import aiohttp
             mesh_data = None
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        f"{self.mesh_url}/api/mesh",
-                        timeout=aiohttp.ClientTimeout(total=5),
-                    ) as resp:
-                        mesh_data = await resp.json()
+                session = await self._get_session()
+                async with session.get(f"{self.mesh_url}/api/mesh") as resp:
+                    mesh_data = await resp.json()
             except Exception:
                 logger.debug("Mesh status unavailable")
             
@@ -304,6 +296,8 @@ class ARKGateway:
         finally:
             if runner:
                 await runner.cleanup()
+            if self._http_session and not self._http_session.closed:
+                await self._http_session.close()
             await self._nats.close()
             logger.info("Gateway shutdown complete")
 
