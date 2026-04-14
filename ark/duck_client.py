@@ -36,6 +36,7 @@ class DuckClient:
             )
         """)
         
+        self.conn.execute("CREATE SEQUENCE IF NOT EXISTS seq_lks_id START 1")
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS lks_metrics (
                 id INTEGER PRIMARY KEY DEFAULT nextval('seq_lks_id'),
@@ -49,6 +50,7 @@ class DuckClient:
             )
         """)
         
+        self.conn.execute("CREATE SEQUENCE IF NOT EXISTS seq_delta_id START 1")
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS deltas (
                 id INTEGER PRIMARY KEY DEFAULT nextval('seq_delta_id'),

@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 
 import aiohttp
+from ark.security import validate_entity_id
 import nats
 from nats.errors import Error as NATSError
 
@@ -291,6 +292,10 @@ class HomeAssistantEmitter:
     async def update_device(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Update device state"""
         entity_id = params.get('entity_id', '')
+        try:
+            validate_entity_id(entity_id)
+        except ValueError:
+            return {"error": "Invalid entity_id format", "entity_id": entity_id}
         new_state = params.get('state', '')
         
         if not self.session or not self.ha_token:

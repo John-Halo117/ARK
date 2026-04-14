@@ -68,7 +68,7 @@ class ArkEvent:
     delta: Optional[Dict[str, float]] = None
     
     # Metadata
-    tags: Dict[str, str] = None
+    tags: Optional[Dict[str, str]] = None
     
     def to_json(self) -> str:
         data = {

@@ -16,10 +16,13 @@ pub struct Engine {
 
 impl Engine {
     pub fn new() -> Self {
+        let db_path = std::env::var("ARK_DB_PATH")
+            .unwrap_or_else(|_| "/data/ark.db".to_string());
         Self {
             prev: None,
             kalman: Kalman::new(),
-            store: DuckStore::new("ark.db"),
+            store: DuckStore::new(&db_path)
+                .expect("Failed to initialize DuckDB — check ARK_DB_PATH"),
         }
     }
 
@@ -39,10 +42,14 @@ impl Engine {
 
         let decision = decide(&lks);
 
-        // Store
-        self.store.insert_lks(ts, &lks);
+        // Store — log errors instead of panicking
+        if let Err(e) = self.store.insert_lks(ts, &lks) {
+            eprintln!("Failed to insert LKS: {e}");
+        }
         if let Some(d) = &delta {
-            self.store.insert_delta(ts, d);
+            if let Err(e) = self.store.insert_delta(ts, d) {
+                eprintln!("Failed to insert delta: {e}");
+            }
         }
 
         // WAL
