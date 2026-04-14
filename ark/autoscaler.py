@@ -21,6 +21,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ARK-Autoscaler')
 
+_AUTOSCALER_API_KEY = os.environ.get('AUTOSCALER_API_KEY', '')
+
 
 class Autoscaler:
     """Dynamic compute spawner based on demand signals"""
@@ -250,7 +252,21 @@ class Autoscaler:
     async def expose_api(self, host: str = "0.0.0.0", port: int = 7001):
         """Expose REST API for autoscaler control"""
         from aiohttp import web
-        
+
+        @web.middleware
+        async def auth_middleware(request, handler):
+            """Require API key for mutating endpoints"""
+            if request.method in ('POST', 'PUT', 'DELETE'):
+                if not _AUTOSCALER_API_KEY:
+                    return web.json_response(
+                        {"error": "AUTOSCALER_API_KEY not configured on server"},
+                        status=503
+                    )
+                provided = request.headers.get('X-API-Key', '')
+                if not provided or provided != _AUTOSCALER_API_KEY:
+                    return web.json_response({"error": "Unauthorized"}, status=401)
+            return await handler(request)
+
         async def get_instances_handler(request):
             service = request.match_info.get('service', '')
             instances = self.service_instances.get(service, [])
@@ -262,7 +278,12 @@ class Autoscaler:
         
         async def spawn_handler(request):
             data = await request.json()
-            service = data.get('service')
+            service = data.get('service', '')
+            if service not in self.spawn_config:
+                return web.json_response(
+                    {"error": f"Unknown service: {service}"},
+                    status=400
+                )
             container_id = await self.spawn_instance(service)
             return web.json_response({
                 "service": service,
@@ -270,7 +291,7 @@ class Autoscaler:
                 "success": bool(container_id)
             })
         
-        app = web.Application()
+        app = web.Application(middlewares=[auth_middleware])
         app.router.add_get('/api/instances/{service}', get_instances_handler)
         app.router.add_post('/api/spawn', spawn_handler)
         

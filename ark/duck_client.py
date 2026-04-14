@@ -101,13 +101,14 @@ class DuckClient:
     
     def get_latest_lks(self, source: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Query latest LKS for source"""
-        result = self.conn.execute(f"""
+        limit = max(1, min(int(limit), 1000))
+        result = self.conn.execute("""
             SELECT source, qts, dsi, dss, phase, timestamp, created_at
             FROM lks_metrics
             WHERE source = ?
             ORDER BY timestamp DESC
-            LIMIT {limit}
-        """, [source]).fetchall()
+            LIMIT ?
+        """, [source, limit]).fetchall()
         
         return [dict(r) for r in result]
     
@@ -129,8 +130,9 @@ class DuckClient:
     def query_events(self, source: Optional[str] = None, event_type: Optional[str] = None, 
                     limit: int = 100) -> List[Dict[str, Any]]:
         """Query events with filters"""
+        limit = max(1, min(int(limit), 1000))
         query = "SELECT * FROM events WHERE 1=1"
-        params = []
+        params: list = []
         
         if source:
             query += " AND source = ?"
@@ -139,7 +141,8 @@ class DuckClient:
             query += " AND event_type = ?"
             params.append(event_type)
         
-        query += f" ORDER BY timestamp DESC LIMIT {limit}"
+        query += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
         
         result = self.conn.execute(query, params).fetchall()
         return [dict(r) for r in result]

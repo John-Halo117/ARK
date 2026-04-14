@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -15,6 +16,15 @@ import nats
 from aiohttp import web
 from ark.duck_client import DuckClient
 from ark.event_schema import create_event, EventType, EventSource
+
+
+def _safe_int(value: str, default: int, min_val: int = 1, max_val: int = 1000) -> int:
+    """Safely parse an integer query parameter with bounds."""
+    try:
+        n = int(value)
+    except (ValueError, TypeError):
+        return default
+    return max(min_val, min(n, max_val))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,7 +66,7 @@ class ARKGateway:
                     return web.json_response(data)
         except Exception as e:
             logger.error(f"Mesh query error: {e}")
-            return web.json_response({"error": str(e)}, status=500)
+            return web.json_response({"error": "Failed to query mesh registry"}, status=500)
     
     async def handle_service_info(self, request: web.Request) -> web.Response:
         """GET /api/service/{name} - Get service info"""
@@ -68,7 +78,8 @@ class ARKGateway:
                     data = await resp.json()
                     return web.json_response(data)
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
+            logger.error(f"Service info error: {e}")
+            return web.json_response({"error": "Failed to query service info"}, status=500)
     
     async def handle_route_capability(self, request: web.Request) -> web.Response:
         """GET /api/route/{capability} - Get best instance for capability"""
@@ -80,7 +91,8 @@ class ARKGateway:
                     data = await resp.json()
                     return web.json_response(data)
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
+            logger.error(f"Route capability error: {e}")
+            return web.json_response({"error": "Failed to route capability"}, status=500)
     
     async def handle_call_capability(self, request: web.Request) -> web.Response:
         """POST /api/call/{capability} - Call a capability"""
@@ -132,14 +144,14 @@ class ARKGateway:
         
         except Exception as e:
             logger.error(f"Capability call error: {e}")
-            return web.json_response({"error": str(e)}, status=500)
+            return web.json_response({"error": "Failed to execute capability call"}, status=500)
     
     async def handle_query_events(self, request: web.Request) -> web.Response:
         """GET /api/events?source=X&type=Y&limit=Z - Query events"""
         try:
             source = request.rel_url.query.get('source')
             event_type = request.rel_url.query.get('type')
-            limit = int(request.rel_url.query.get('limit', 100))
+            limit = _safe_int(request.rel_url.query.get('limit', '100'), 100)
             
             events = self.db.query_events(source, event_type, limit)
             
@@ -148,12 +160,13 @@ class ARKGateway:
                 "events": events
             })
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
+            logger.error(f"Event query error: {e}")
+            return web.json_response({"error": "Internal server error"}, status=500)
     
     async def handle_query_metrics(self, request: web.Request) -> web.Response:
         """GET /api/metrics/{source} - Get latest LKS metrics"""
         source = request.match_info.get('source', '')
-        limit = int(request.rel_url.query.get('limit', 10))
+        limit = _safe_int(request.rel_url.query.get('limit', '10'), 10)
         
         try:
             metrics = self.db.get_latest_lks(source, limit)
@@ -163,7 +176,8 @@ class ARKGateway:
                 "metrics": metrics
             })
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
+            logger.error(f"Metrics query error: {e}")
+            return web.json_response({"error": "Internal server error"}, status=500)
     
     async def handle_system_status(self, request: web.Request) -> web.Response:
         """GET /api/status - Overall system status"""
@@ -188,7 +202,8 @@ class ARKGateway:
                 "gateway": "healthy"
             })
         except Exception as e:
-            return web.json_response({"error": str(e)}, status=500)
+            logger.error(f"System status error: {e}")
+            return web.json_response({"error": "Internal server error"}, status=500)
     
     def create_app(self) -> web.Application:
         """Create aiohttp application"""

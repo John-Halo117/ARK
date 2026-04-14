@@ -283,10 +283,19 @@ class HomeAssistantEmitter:
             "timestamp": datetime.utcnow().isoformat()
         }
     
+    @staticmethod
+    def _validate_entity_id(entity_id: str) -> bool:
+        """Validate entity_id format to prevent path traversal."""
+        import re
+        return bool(re.match(r'^[a-z_]+\.[a-z0-9_]+$', entity_id))
+
     async def update_device(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Update device state"""
         entity_id = params.get('entity_id', '')
         new_state = params.get('state', '')
+        
+        if not self._validate_entity_id(entity_id):
+            return {"error": "Invalid entity_id format", "entity_id": entity_id}
         
         if not self.session or not self.ha_token:
             return {
