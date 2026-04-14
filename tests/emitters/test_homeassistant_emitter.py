@@ -3,6 +3,10 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from ark.subjects import (
+    EVENT_CLIMATE_TEMPERATURE, EVENT_LIGHT_TOGGLE,
+    EVENT_SENSOR_READING, EVENT_STATE_CHANGE,
+)
 from emitters.homeassistant_emitter import HomeAssistantEmitter
 
 
@@ -36,31 +40,30 @@ class TestHomeAssistantEmitter:
         await self.emitter.emit_state_change(
             "climate.livingroom", "off", "heat", {"current_temperature": 22}
         )
-        # Should publish to ark.event.climate.temperature
         calls = self.emitter.js.publish.call_args_list
         topics = [c[0][0] for c in calls]
-        assert "ark.event.climate.temperature" in topics
+        assert EVENT_CLIMATE_TEMPERATURE in topics
 
     @pytest.mark.asyncio
     async def test_emit_state_change_light(self):
         await self.emitter.emit_state_change("light.kitchen", "off", "on", {})
         calls = self.emitter.js.publish.call_args_list
         topics = [c[0][0] for c in calls]
-        assert "ark.event.light.toggle" in topics
+        assert EVENT_LIGHT_TOGGLE in topics
 
     @pytest.mark.asyncio
     async def test_emit_state_change_sensor(self):
         await self.emitter.emit_state_change("sensor.humidity", "45", "50", {})
         calls = self.emitter.js.publish.call_args_list
         topics = [c[0][0] for c in calls]
-        assert "ark.event.sensor.reading" in topics
+        assert EVENT_SENSOR_READING in topics
 
     @pytest.mark.asyncio
     async def test_emit_state_change_generic(self):
         await self.emitter.emit_state_change("switch.outlet", "off", "on", {})
         calls = self.emitter.js.publish.call_args_list
         topics = [c[0][0] for c in calls]
-        assert "ark.event.state.change" in topics
+        assert EVENT_STATE_CHANGE in topics
 
     @pytest.mark.asyncio
     async def test_emit_state_change_increments_count(self):

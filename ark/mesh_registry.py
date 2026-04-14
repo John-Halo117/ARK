@@ -26,6 +26,7 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.subjects import MESH_REGISTER, MESH_HEARTBEAT, MESH_REGISTERED
 
 logging.basicConfig(
     level=logging.INFO,
@@ -100,8 +101,8 @@ class MeshRegistry:
     async def subscribe_registrations(self):
         """Listen for service registrations"""
         try:
-            sub = await self.nc.subscribe("ark.mesh.register")
-            logger.info("Subscribed to ark.mesh.register")
+            sub = await self.nc.subscribe(MESH_REGISTER)
+            logger.info("Subscribed to %s", MESH_REGISTER)
             
             async for msg in sub.messages:
                 try:
@@ -165,7 +166,7 @@ class MeshRegistry:
         logger.info("Registered %s/%s: %s", service, instance_id, safe_caps)
         
         # Publish registration event
-        await self.js.publish("ark.mesh.registered", json.dumps({
+        await self.js.publish(MESH_REGISTERED, json.dumps({
             "service": service,
             "instance_id": instance_id,
             "capabilities": safe_caps,
@@ -175,8 +176,8 @@ class MeshRegistry:
     async def subscribe_heartbeats(self):
         """Listen for service heartbeats"""
         try:
-            sub = await self.nc.subscribe("ark.mesh.heartbeat")
-            logger.info("Subscribed to ark.mesh.heartbeat")
+            sub = await self.nc.subscribe(MESH_HEARTBEAT)
+            logger.info("Subscribed to %s", MESH_HEARTBEAT)
             
             async for msg in sub.messages:
                 try:
@@ -211,11 +212,11 @@ class MeshRegistry:
                         del instances[instance_id]
                         logger.info(f"Removed expired: {service}/{instance_id}")
             
-            # Clean capability index
+            # Clean capability index — keep only instance IDs that still exist
             for capability in list(self.capability_index.keys()):
                 self.capability_index[capability] = [
                     iid for iid in self.capability_index[capability]
-                    if not any(iid in insts for insts in self.registry.values())
+                    if any(iid in insts for insts in self.registry.values())
                 ]
                 if not self.capability_index[capability]:
                     del self.capability_index[capability]

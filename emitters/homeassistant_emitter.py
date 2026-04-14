@@ -16,6 +16,13 @@ import aiohttp
 import nats
 from nats.errors import Error as NATSError
 
+from ark.subjects import (
+    MESH_REGISTER, MESH_HEARTBEAT, METRICS_TEMPERATURE,
+    EVENT_STATE_CHANGE, EVENT_CLIMATE_TEMPERATURE, EVENT_LIGHT_TOGGLE,
+    EVENT_SENSOR_READING,
+    call_subscribe_subject, reply_subject, parse_capability_from_subject,
+)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -75,7 +82,7 @@ class HomeAssistantEmitter:
             "ttl": 10
         }
         
-        await self.nc.publish("ark.mesh.register", json.dumps(event).encode())
+        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -84,7 +91,7 @@ class HomeAssistantEmitter:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish("ark.mesh.heartbeat", json.dumps({
+                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.event_count / 100.0,
@@ -170,16 +177,16 @@ class HomeAssistantEmitter:
             entity_type = entity_id.split('.')[0]
             
             if entity_type == 'climate':
-                topic = "ark.event.climate.temperature"
+                topic = EVENT_CLIMATE_TEMPERATURE
                 value = attributes.get('current_temperature', 0)
             elif entity_type == 'light':
-                topic = "ark.event.light.toggle"
+                topic = EVENT_LIGHT_TOGGLE
                 value = new_state
             elif entity_type == 'sensor':
-                topic = "ark.event.sensor.reading"
+                topic = EVENT_SENSOR_READING
                 value = new_state
             else:
-                topic = "ark.event.state.change"
+                topic = EVENT_STATE_CHANGE
                 value = new_state
             
             event = {
@@ -195,7 +202,7 @@ class HomeAssistantEmitter:
             await self.js.publish(topic, json.dumps(event).encode())
             
             # Also emit to general event topic for agents to process
-            await self.js.publish("ark.events", json.dumps({
+            await self.js.publish("ark.event.state.change", json.dumps({
                 "type": "homeassistant.state_change",
                 "entity_id": entity_id,
                 "old_state": old_state,
@@ -212,7 +219,7 @@ class HomeAssistantEmitter:
     async def emit_temperature_metric(self, entity_id: str, temperature: float):
         """Emit temperature as metric for anomaly detection"""
         try:
-            await self.js.publish("ark.metrics.temperature", json.dumps({
+            await self.js.publish(METRICS_TEMPERATURE, json.dumps({
                 "name": f"climate.{entity_id}",
                 "value": temperature,
                 "unit": "celsius",
@@ -228,13 +235,12 @@ class HomeAssistantEmitter:
     async def subscribe_capability_requests(self):
         """Subscribe to capability requests for HA operations"""
         try:
-            sub = await self.nc.subscribe(f"ark.call.{self.service_name}.*")
+            sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
             logger.info("Subscribed to capability requests")
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    capability = subject_parts[-1] if len(subject_parts) >= 4 else "unknown"
+                    capability = parse_capability_from_subject(msg.subject)
                     
                     request = json.loads(msg.data.decode())
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
@@ -244,8 +250,7 @@ class HomeAssistantEmitter:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    reply_topic = f"ark.reply.{request_id}"
-                    await self.js.publish(reply_topic, json.dumps(result).encode())
+                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
                     
                     self.event_count += 1
                 

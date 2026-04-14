@@ -26,6 +26,11 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.subjects import (
+    SYSTEM_QUEUE_DEPTH_SUBSCRIBE, SYSTEM_LATENCY_SUBSCRIBE,
+    SYSTEM_ASHI, SPAWN_CONFIRMED,
+    parse_service_from_queue_depth,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -95,13 +100,12 @@ class Autoscaler:
     async def monitor_demand(self):
         """Listen for demand signals"""
         try:
-            sub = await self.nc.subscribe("ark.system.queue_depth.*")
+            sub = await self.nc.subscribe(SYSTEM_QUEUE_DEPTH_SUBSCRIBE)
             logger.info("Subscribed to demand signals")
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    service = subject_parts[-1] if len(subject_parts) > 3 else "unknown"
+                    service = parse_service_from_queue_depth(msg.subject)
                     
                     event = json.loads(msg.data.decode())
                     depth = event.get('depth', 0)
@@ -120,12 +124,11 @@ class Autoscaler:
     async def monitor_latency(self):
         """Listen for latency signals"""
         try:
-            sub = await self.nc.subscribe("ark.system.latency.*")
+            sub = await self.nc.subscribe(SYSTEM_LATENCY_SUBSCRIBE)
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    service = subject_parts[-1] if len(subject_parts) > 3 else "unknown"
+                    service = parse_service_from_queue_depth(msg.subject)
                     
                     event = json.loads(msg.data.decode())
                     latency = event.get('latency_ms', 0)
@@ -205,7 +208,7 @@ class Autoscaler:
                 logger.info(f"Spawned {service}/{instance_id}: {container_id}")
                 
                 # Publish spawn event
-                await self.js.publish("ark.spawn.confirmed", json.dumps({
+                await self.js.publish(SPAWN_CONFIRMED, json.dumps({
                     "service": service,
                     "instance_id": instance_id,
                     "container_id": container_id,
@@ -248,7 +251,7 @@ class Autoscaler:
     async def monitor_ashi(self):
         """Listen for ASHI (System Health Index) degradation signals"""
         try:
-            sub = await self.nc.subscribe("ark.system.ashi")
+            sub = await self.nc.subscribe(SYSTEM_ASHI)
             logger.info("Subscribed to ASHI signals")
             
             async for msg in sub.messages:

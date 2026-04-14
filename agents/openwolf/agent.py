@@ -18,6 +18,10 @@ from nats.errors import Error as NATSError
 
 from ark.security import sanitize_string, validate_payload, safe_log_event
 from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
+from ark.subjects import (
+    MESH_REGISTER, MESH_HEARTBEAT, METRICS_SUBSCRIBE, ANOMALY_DETECTED,
+    call_subscribe_subject, reply_subject, parse_capability_from_subject,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,7 +79,7 @@ class OpenWolfAgent:
             "ttl": 10
         }
         
-        await self.nc.publish("ark.mesh.register", json.dumps(event).encode())
+        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -84,7 +88,7 @@ class OpenWolfAgent:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish("ark.mesh.heartbeat", json.dumps({
+                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.request_count / 100.0,
@@ -100,13 +104,12 @@ class OpenWolfAgent:
     async def subscribe_calls(self):
         """Subscribe to capability calls"""
         try:
-            sub = await self.nc.subscribe(f"ark.call.{self.service_name}.*")
+            sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
             logger.info(f"Subscribed to capability calls")
             
             async for msg in sub.messages:
                 try:
-                    subject_parts = msg.subject.split('.')
-                    capability = subject_parts[-1] if len(subject_parts) >= 4 else "unknown"
+                    capability = parse_capability_from_subject(msg.subject)
                     
                     request = json.loads(msg.data.decode())
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
@@ -116,8 +119,7 @@ class OpenWolfAgent:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    reply_topic = f"ark.reply.{request_id}"
-                    await self.js.publish(reply_topic, json.dumps(result).encode())
+                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
                     
                     self.request_count += 1
                     
@@ -130,7 +132,7 @@ class OpenWolfAgent:
     async def subscribe_metrics(self):
         """Subscribe to metric streams"""
         try:
-            sub = await self.nc.subscribe("ark.metrics.*")
+            sub = await self.nc.subscribe(METRICS_SUBSCRIBE)
             logger.info("Subscribed to metrics")
             
             async for msg in sub.messages:
@@ -155,7 +157,7 @@ class OpenWolfAgent:
                     is_anomaly = await self.check_anomaly(metric_name, value)
                     
                     if is_anomaly:
-                        await self.js.publish("ark.anomaly.detected", json.dumps({
+                        await self.js.publish(ANOMALY_DETECTED, json.dumps({
                             "metric": metric_name,
                             "value": value,
                             "timestamp": datetime.utcnow().isoformat()

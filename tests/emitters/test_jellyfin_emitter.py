@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from ark.subjects import EVENT_MEDIA_PLAYBACK, METRICS_MEDIA_DURATION
 from emitters.jellyfin_emitter import JellyfinEmitter
 
 
@@ -38,8 +39,8 @@ class TestJellyfinEmitter:
 
         calls = self.emitter.js.publish.call_args_list
         topics = [c[0][0] for c in calls]
-        assert "ark.event.media.playback" in topics
-        assert "ark.metrics.media_duration" in topics
+        assert EVENT_MEDIA_PLAYBACK in topics
+        assert METRICS_MEDIA_DURATION in topics
         assert self.emitter.event_count == 1
 
     @pytest.mark.asyncio
@@ -49,8 +50,8 @@ class TestJellyfinEmitter:
         # Only playback event, no duration metric
         calls = self.emitter.js.publish.call_args_list
         topics = [c[0][0] for c in calls]
-        assert topics.count("ark.event.media.playback") == 1
-        assert "ark.metrics.media_duration" not in topics
+        assert topics.count(EVENT_MEDIA_PLAYBACK) == 1
+        assert METRICS_MEDIA_DURATION not in topics
 
     # ---- emit_playback_change ----
 

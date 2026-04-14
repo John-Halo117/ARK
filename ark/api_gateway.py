@@ -32,6 +32,7 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.subjects import call_subject
 
 logging.basicConfig(
     level=logging.INFO,
@@ -165,7 +166,7 @@ class ARKGateway:
             }
             
             await self.nc.publish(
-                f"ark.call.{service}.{capability}",
+                call_subject(service, capability),
                 json.dumps(call_msg).encode()
             )
             
