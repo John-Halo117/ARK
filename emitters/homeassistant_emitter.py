@@ -287,7 +287,7 @@ class HomeAssistantEmitter:
     def _validate_entity_id(entity_id: str) -> bool:
         """Validate entity_id format to prevent path traversal."""
         import re
-        return bool(re.match(r'^[a-z_]+\.[a-z0-9_]+$', entity_id))
+        return bool(re.match(r'^[a-z_]+\.[a-zA-Z0-9_-]+$', entity_id))
 
     async def update_device(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Update device state"""

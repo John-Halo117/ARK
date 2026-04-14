@@ -5,8 +5,10 @@ Monitors queue depth, latency, and capability demand
 """
 
 import asyncio
+import hmac
 import json
 import logging
+import os
 import subprocess
 import uuid
 from datetime import datetime
@@ -20,8 +22,6 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
 )
 logger = logging.getLogger('ARK-Autoscaler')
-
-_AUTOSCALER_API_KEY = os.environ.get('AUTOSCALER_API_KEY', '')
 
 
 class Autoscaler:
@@ -257,13 +257,14 @@ class Autoscaler:
         async def auth_middleware(request, handler):
             """Require API key for mutating endpoints"""
             if request.method in ('POST', 'PUT', 'DELETE'):
-                if not _AUTOSCALER_API_KEY:
+                api_key = os.environ.get('AUTOSCALER_API_KEY', '')
+                if not api_key:
                     return web.json_response(
                         {"error": "AUTOSCALER_API_KEY not configured on server"},
                         status=503
                     )
                 provided = request.headers.get('X-API-Key', '')
-                if not provided or provided != _AUTOSCALER_API_KEY:
+                if not provided or not hmac.compare_digest(provided, api_key):
                     return web.json_response({"error": "Unauthorized"}, status=401)
             return await handler(request)
 
