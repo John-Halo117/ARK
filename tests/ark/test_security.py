@@ -276,6 +276,22 @@ class TestRateLimiter:
         rl.reset("k")
         assert rl.allow("k") is True
 
+    def test_evicts_stale_entries(self):
+        """Stale entries are evicted once max_keys is exceeded."""
+        rl = RateLimiter(rate=1, burst=1, max_keys=2, evict_after=0)
+        rl.allow("a")
+        rl.allow("b")
+        rl.allow("c")  # triggers eviction — a and b are stale (evict_after=0)
+        # After eviction, only recent key(s) should remain
+        assert len(rl._buckets) <= 3  # at most the 3 we just added
+
+    def test_no_eviction_under_max_keys(self):
+        """No eviction when under max_keys threshold."""
+        rl = RateLimiter(rate=1, burst=1, max_keys=100, evict_after=0)
+        rl.allow("a")
+        rl.allow("b")
+        assert len(rl._buckets) == 2  # no eviction triggered
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers

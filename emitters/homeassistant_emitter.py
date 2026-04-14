@@ -201,14 +201,17 @@ class HomeAssistantEmitter:
             # Publish state change
             await self.js.publish(topic, json.dumps(event).encode())
             
-            # Also emit to general event topic for agents to process
-            await self.js.publish("ark.event.state.change", json.dumps({
-                "type": "homeassistant.state_change",
-                "entity_id": entity_id,
-                "old_state": old_state,
-                "new_state": new_state,
-                "payload": event
-            }).encode())
+            # Also emit to general event topic for agents to process,
+            # but only if the typed topic differs (avoids duplicate publish
+            # for generic entities whose topic is already EVENT_STATE_CHANGE).
+            if topic != EVENT_STATE_CHANGE:
+                await self.js.publish(EVENT_STATE_CHANGE, json.dumps({
+                    "type": "homeassistant.state_change",
+                    "entity_id": entity_id,
+                    "old_state": old_state,
+                    "new_state": new_state,
+                    "payload": event
+                }).encode())
             
             logger.info(f"Emitted state change: {entity_id} {old_state} → {new_state}")
             self.event_count += 1

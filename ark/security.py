@@ -189,15 +189,30 @@ class RateLimiter:
     Args:
         rate: refill tokens per second
         burst: maximum bucket size
+        max_keys: evict stale entries when bucket count exceeds this
+        evict_after: seconds of inactivity before a key is eligible for eviction
     """
 
-    def __init__(self, rate: float = 10.0, burst: int = 50):
+    def __init__(self, rate: float = 10.0, burst: int = 50,
+                 max_keys: int = 10_000, evict_after: float = 300.0):
         self._rate = rate
         self._burst = burst
+        self._max_keys = max_keys
+        self._evict_after = evict_after
         self._buckets: Dict[str, Tuple[float, float]] = {}  # key -> (tokens, last_ts)
+
+    def _maybe_evict(self, now: float) -> None:
+        """Remove entries not accessed within *evict_after* seconds."""
+        if len(self._buckets) <= self._max_keys:
+            return
+        cutoff = now - self._evict_after
+        stale = [k for k, (_, ts) in self._buckets.items() if ts < cutoff]
+        for k in stale:
+            del self._buckets[k]
 
     def allow(self, key: str = "__global__") -> bool:
         now = time.monotonic()
+        self._maybe_evict(now)
         tokens, last = self._buckets.get(key, (float(self._burst), now))
         elapsed = now - last
         tokens = min(self._burst, tokens + elapsed * self._rate)
