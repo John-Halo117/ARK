@@ -66,6 +66,23 @@ class TestHomeAssistantEmitter:
         assert EVENT_STATE_CHANGE in topics
 
     @pytest.mark.asyncio
+    async def test_emit_state_change_generic_no_duplicate(self):
+        """Generic entities should publish exactly once to EVENT_STATE_CHANGE, not twice."""
+        await self.emitter.emit_state_change("switch.outlet", "off", "on", {})
+        calls = self.emitter.js.publish.call_args_list
+        topics = [c[0][0] for c in calls]
+        assert topics.count(EVENT_STATE_CHANGE) == 1
+
+    @pytest.mark.asyncio
+    async def test_emit_state_change_typed_also_publishes_general(self):
+        """Typed entities (climate/light/sensor) should also publish to EVENT_STATE_CHANGE."""
+        await self.emitter.emit_state_change("light.desk", "off", "on", {})
+        calls = self.emitter.js.publish.call_args_list
+        topics = [c[0][0] for c in calls]
+        assert EVENT_LIGHT_TOGGLE in topics
+        assert EVENT_STATE_CHANGE in topics
+
+    @pytest.mark.asyncio
     async def test_emit_state_change_increments_count(self):
         assert self.emitter.event_count == 0
         await self.emitter.emit_state_change("light.x", "off", "on", {})
