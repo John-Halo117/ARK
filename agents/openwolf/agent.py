@@ -16,6 +16,9 @@ from statistics import mean, stdev
 import nats
 from nats.errors import Error as NATSError
 
+from ark.security import sanitize_string, validate_payload, safe_log_event
+from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -41,22 +44,23 @@ class OpenWolfAgent:
         self.nc = None
         self.js = None
         self.request_count = 0
+        self._nats = ResilientNATSConnection(self.nats_url)
+        self.shutdown = ShutdownCoordinator()
+        self.health = HealthCheck(self.service_name)
+        self.health.register("nats", lambda: self._nats.is_connected)
         
         # Metric baselines and history
         self.metric_history: Dict[str, List[float]] = {}
+        self._max_metric_history = 100
         self.ashi_score = 100
         
-        logger.info(f"OpenWolf initialized (instance={self.instance_id})")
+        logger.info("OpenWolf initialized (instance=%s)", self.instance_id)
     
     async def connect(self):
-        """Connect to NATS"""
-        try:
-            self.nc = await nats.connect(self.nats_url)
-            self.js = self.nc.jetstream()
-            logger.info(f"Connected to NATS")
-        except NATSError as e:
-            logger.error(f"Connection failed: {e}")
-            raise
+        """Connect to NATS with resilient reconnection"""
+        self.nc = await self._nats.connect()
+        self.js = self._nats.js
+        logger.info("Connected to NATS")
     
     async def register(self):
         """Register with mesh"""
@@ -219,15 +223,19 @@ class OpenWolfAgent:
         return result
     
     async def ingest_metric(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Ingest a system metric"""
-        metric_name = params.get('name', '')
+        """Ingest a system metric with bounds checking"""
+        metric_name = sanitize_string(params.get('name', ''), 128)
         value = params.get('value', 0)
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return {"error": "value must be numeric"}
         
         if metric_name not in self.metric_history:
             self.metric_history[metric_name] = []
         
         self.metric_history[metric_name].append(value)
-        if len(self.metric_history[metric_name]) > 100:
+        if len(self.metric_history[metric_name]) > self._max_metric_history:
             self.metric_history[metric_name].pop(0)
         
         result = {
@@ -297,8 +305,9 @@ class OpenWolfAgent:
         return result
     
     async def run(self):
-        """Main agent loop"""
+        """Main agent loop with graceful shutdown"""
         try:
+            self.shutdown.install_signal_handlers()
             await self.connect()
             await self.register()
             
@@ -313,8 +322,7 @@ class OpenWolfAgent:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
-            if self.nc:
-                await self.nc.close()
+            await self._nats.close()
 
 
 async def main():

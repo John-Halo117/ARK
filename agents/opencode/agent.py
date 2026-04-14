@@ -15,6 +15,9 @@ from typing import Dict, Any, List
 import nats
 from nats.errors import Error as NATSError
 
+from ark.security import sanitize_string, validate_payload, safe_log_event
+from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
@@ -41,18 +44,18 @@ class OpenCodeAgent:
         self.nc = None
         self.js = None
         self.request_count = 0
+        self._nats = ResilientNATSConnection(self.nats_url)
+        self.shutdown = ShutdownCoordinator()
+        self.health = HealthCheck(self.service_name)
+        self.health.register("nats", lambda: self._nats.is_connected)
         
-        logger.info(f"OpenCode initialized (instance={self.instance_id})")
+        logger.info("OpenCode initialized (instance=%s)", self.instance_id)
     
     async def connect(self):
-        """Connect to NATS"""
-        try:
-            self.nc = await nats.connect(self.nats_url)
-            self.js = self.nc.jetstream()
-            logger.info(f"Connected to NATS")
-        except NATSError as e:
-            logger.error(f"Connection failed: {e}")
-            raise
+        """Connect to NATS with resilient reconnection"""
+        self.nc = await self._nats.connect()
+        self.js = self._nats.js
+        logger.info("Connected to NATS")
     
     async def register(self):
         """Register with mesh"""
@@ -140,8 +143,8 @@ class OpenCodeAgent:
     
     async def analyze_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze code for patterns, quality, security"""
-        source = params.get('source', '')
-        language = params.get('language', 'python')
+        source = sanitize_string(params.get('source', ''), 100_000)
+        language = sanitize_string(params.get('language', 'python'), 32)
         
         result = {
             "agent": self.service_name,
@@ -165,8 +168,8 @@ class OpenCodeAgent:
     
     async def transform_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Transform code (refactor, migrate, optimize)"""
-        source = params.get('source', '')
-        transform_type = params.get('type', 'refactor')
+        source = sanitize_string(params.get('source', ''), 100_000)
+        transform_type = sanitize_string(params.get('type', 'refactor'), 32)
         
         result = {
             "agent": self.service_name,
@@ -183,8 +186,8 @@ class OpenCodeAgent:
     
     async def generate_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate code from specification"""
-        spec = params.get('spec', '')
-        language = params.get('language', 'python')
+        spec = sanitize_string(params.get('spec', ''), 10_000)
+        language = sanitize_string(params.get('language', 'python'), 32)
         
         result = {
             "agent": self.service_name,
@@ -201,7 +204,7 @@ class OpenCodeAgent:
     
     async def plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create execution plan for goal"""
-        goal = params.get('goal', '')
+        goal = sanitize_string(params.get('goal', ''), 2_000)
         
         result = {
             "agent": self.service_name,
@@ -221,7 +224,7 @@ class OpenCodeAgent:
     
     async def decompose(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Decompose problem into sub-tasks"""
-        problem = params.get('problem', '')
+        problem = sanitize_string(params.get('problem', ''), 2_000)
         
         result = {
             "agent": self.service_name,
@@ -237,8 +240,9 @@ class OpenCodeAgent:
         return result
     
     async def run(self):
-        """Main agent loop"""
+        """Main agent loop with graceful shutdown"""
         try:
+            self.shutdown.install_signal_handlers()
             await self.connect()
             await self.register()
             
@@ -252,8 +256,7 @@ class OpenCodeAgent:
         except KeyboardInterrupt:
             logger.info("Shutting down...")
         finally:
-            if self.nc:
-                await self.nc.close()
+            await self._nats.close()
 
 
 async def main():
