@@ -40,6 +40,7 @@
   ],
   "rolling_pass_rate_target": 0.999,
   "rolling_pass_rate_window": 1000,
+  "max_repair_attempts": 5,
   "promote_on_green_default": false,
   "require_clean_worktree_for_promote": true
 }
