@@ -39,6 +39,9 @@ func (p *Projector) Project(event models.Event) error {
 }
 
 func (p *Projector) Replay(fromSeq, toSeq uint64) ([]models.Event, error) {
+	if p.Redis == nil {
+		return nil, errors.New("redis client is required")
+	}
 	if fromSeq == 0 || toSeq == 0 || toSeq < fromSeq {
 		return nil, errors.New("invalid sequence range")
 	}

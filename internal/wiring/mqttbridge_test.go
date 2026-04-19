@@ -23,7 +23,7 @@ func TestMQTTBridgeForward(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evt.CID == "" || p.count != 1 {
+	if evt.CID == "" || evt.StateHash == "" || p.count != 1 {
 		t.Fatalf("expected cid and publish, got event=%+v count=%d", evt, p.count)
 	}
 }

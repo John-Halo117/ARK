@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"crypto/sha256"
+	"crypto/sha3"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -75,9 +76,13 @@ func (b MQTTBridge) Forward(msg MQTTMessage) (CIDEvent, error) {
 	}
 
 	stateRaw := append([]byte(msg.Topic+":"), msg.Payload...)
-	hash := sha256.Sum256(stateRaw)
-	cid := hex.EncodeToString(hash[:])
-	event := CIDEvent{CID: cid, Topic: msg.Topic, Payload: msg.Payload, StateHash: cid, Occurred: time.Now().UTC()}
+	stateHash := sha256.Sum256(stateRaw)
+	h := sha3.NewCSHAKE256([]byte("ARK-Field-CID"), []byte("mqtt-event"))
+	_, _ = h.Write(stateRaw)
+	cidRaw := make([]byte, 32)
+	_, _ = h.Read(cidRaw)
+	cid := hex.EncodeToString(cidRaw)
+	event := CIDEvent{CID: cid, Topic: msg.Topic, Payload: msg.Payload, StateHash: hex.EncodeToString(stateHash[:]), Occurred: time.Now().UTC()}
 	raw, err := json.Marshal(event)
 	if err != nil {
 		return CIDEvent{}, err

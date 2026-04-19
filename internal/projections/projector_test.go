@@ -35,3 +35,10 @@ func TestProjectionKey(t *testing.T) {
 		t.Fatal("projection key mismatch")
 	}
 }
+
+func TestReplayRequiresRedis(t *testing.T) {
+	p := &Projector{}
+	if _, err := p.Replay(1, 2); err == nil {
+		t.Fatal("expected redis required error")
+	}
+}

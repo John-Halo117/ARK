@@ -123,6 +123,10 @@ func main() {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if to-from > 10000 {
+			http.Error(w, "range too large", http.StatusBadRequest)
+			return
+		}
 		events, err := projector.Replay(from, to)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
