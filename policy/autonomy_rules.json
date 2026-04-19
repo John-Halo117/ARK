@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "max_files_changed": 8,
+  "max_added_lines": 400,
+  "max_deleted_lines": 250,
+  "allowed_paths": [
+    "cmd/",
+    "internal/",
+    "tests/",
+    "docs/",
+    "scripts/ai/",
+    "scripts/ci/",
+    "Dockerfile",
+    "docker-compose.yml",
+    "Makefile",
+    "README.md"
+  ],
+  "blocked_paths": [
+    ".git/",
+    ".githooks/",
+    "scripts/sync/",
+    ".github/",
+    ".env",
+    ".env.example",
+    "policy/"
+  ],
+  "forbidden_content_patterns": [
+    "git push",
+    "rm -rf /",
+    "curl http://",
+    "curl https://",
+    "wget http://",
+    "wget https://",
+    "Authorization:",
+    "BEGIN PRIVATE KEY"
+  ],
+  "required_test_commands": [
+    "go test ./...",
+    "pytest"
+  ],
+  "rolling_pass_rate_target": 0.999,
+  "rolling_pass_rate_window": 1000,
+  "promote_on_green_default": false,
+  "require_clean_worktree_for_promote": true
+}
