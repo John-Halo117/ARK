@@ -1,26 +1,47 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
-	"os"
+	"time"
+
+	"github.com/John-Halo117/ARK/arkfield/internal/config"
+	"github.com/John-Halo117/ARK/arkfield/internal/stability"
 )
 
 func main() {
-	addr := envOr("HTTP_ADDR", ":8082")
+	cfg := config.LoadRuntimeConfig(":8082")
+
+	kernel, _ := stability.New(stability.Config{
+		AlphaMax: 0.3,
+		EntropyGuard: 1.0,
+		GMax: cfg.GMax,
+		SigmaK: cfg.SigmaK,
+		HysteresisLambda: cfg.HysteresisLambda,
+		BackpressureEps: cfg.BackpressureEps,
+		TimeDecayRate: cfg.TimeDecayRate,
+		DefaultSoftWeight: stability.SoftWeights{WA: 0.34, WK: 0.33, WG: 0.33},
+	})
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("netwatch:ok"))
+		w.Write([]byte("netwatch:ok"))
 	})
 
-	log.Printf("netwatch listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
-}
+	http.HandleFunc("/gate", func(w http.ResponseWriter, r *http.Request) {
+		var obs stability.Observation
+		_ = json.NewDecoder(r.Body).Decode(&obs)
+		if obs.Elapsed == 0 {
+			obs.Elapsed = time.Second
+		}
+		decision := kernel.Evaluate(obs)
+		if decision.Freeze {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+		json.NewEncoder(w).Encode(decision)
+	})
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+	log.Printf("netwatch listening on %s", cfg.HTTPAddr)
+	log.Fatal(http.ListenAndServe(cfg.HTTPAddr, nil))
 }
