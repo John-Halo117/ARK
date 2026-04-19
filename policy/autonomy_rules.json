@@ -41,6 +41,29 @@
   "rolling_pass_rate_target": 0.999,
   "rolling_pass_rate_window": 1000,
   "max_repair_attempts": 5,
+  "low_loc_batch_threshold": 40,
+  "max_batched_candidates": 3,
+  "autonomous_commit_mode": "single_promote_only",
+  "tier_ratio_thresholds": {
+    "tier1": 4.0,
+    "tier2": 2.0,
+    "tier3": 1.0,
+    "tier4": 0.5,
+    "tier5": 0.0
+  },
+  "repair_sort": [
+    "tier_asc",
+    "tests_passed_desc",
+    "loc_asc",
+    "files_changed_asc"
+  ],
+  "auto_apply_tier1": true,
+  "max_failures_per_cycle": 5,
+  "dedupe_patch_signatures": true,
+  "prefer_minimal_passing_patch": true,
+  "reject_if_larger_than_best_loc_factor": 1.5,
+  "enforce_no_drift": true,
+  "enforce_no_over_optimization": true,
   "promote_on_green_default": false,
   "require_clean_worktree_for_promote": true
 }
