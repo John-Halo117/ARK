@@ -8,6 +8,13 @@ import (
 	"github.com/John-Halo117/ARK/arkfield/internal/models"
 )
 
+// KernelV42 is the canonical ARK Stability Kernel interface.
+type KernelV42 interface {
+	Evaluate(obs Observation) Decision
+}
+
+// --- existing code below ---
+
 type Config struct {
 	AlphaMax          float64
 	EntropyGuard      float64
