@@ -7,13 +7,13 @@ Routes capabilities to Composio API, returns results
 import asyncio
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
 from typing import Dict, Any
 
 from nats.errors import Error as NATSError
 
+from ark.config import load_composio_config
 from ark.security import sanitize_string
 from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
 from ark.subjects import (
@@ -32,10 +32,11 @@ class ComposioBridge:
     """External API execution adapter"""
     
     def __init__(self):
+        config = load_composio_config()
         self.service_name = "composio"
-        self.instance_id = os.environ.get('INSTANCE_ID', str(uuid.uuid4())[:12])
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.composio_api_key = os.environ.get('COMPOSIO_API_KEY', '')
+        self.instance_id = config.runtime.instance_id
+        self.nats_url = config.runtime.nats_url
+        self.composio_api_key = config.composio_api_key
         
         self.capabilities = [
             "external.email",

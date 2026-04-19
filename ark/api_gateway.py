@@ -7,12 +7,12 @@ Routes to: Mesh, DuckDB, agents, storage
 import asyncio
 import json
 import logging
-import os
 from datetime import datetime
 from typing import Optional
 
 import aiohttp
 from aiohttp import web
+from ark.config import load_gateway_config
 from ark.duck_client import DuckClient
 from ark.security import (
     auth_middleware,
@@ -44,8 +44,9 @@ class ARKGateway:
     """API Gateway for ARK system"""
     
     def __init__(self):
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.mesh_url = os.environ.get('MESH_URL', 'http://ark-mesh:7000')
+        config = load_gateway_config()
+        self.nats_url = config.nats_url
+        self.mesh_url = config.mesh_url
         self._nats = ResilientNATSConnection(self.nats_url)
         self.nc = None
         self.js = None
