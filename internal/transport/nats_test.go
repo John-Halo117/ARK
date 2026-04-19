@@ -36,6 +36,13 @@ func TestNATSClientRequestAndEnsureStream(t *testing.T) {
 			payload := make([]byte, n+2)
 			_, _ = io.ReadFull(r, payload)
 			_, _ = r.ReadString('\n') // PING
+			if i == 0 {
+				_, _ = serverConn.Write([]byte("PING\r\n"))
+				pong, _ := r.ReadString('\n')
+				if strings.TrimSpace(pong) != "PONG" {
+					return
+				}
+			}
 			_, _ = serverConn.Write([]byte("MSG _INBOX.x 1 2\r\n{}\r\nPONG\r\n"))
 		}
 	}()
