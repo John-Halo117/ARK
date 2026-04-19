@@ -1,0 +1,30 @@
+{
+  "connectivity": {
+    "default_mode": "offline",
+    "allow_modes": ["offline", "hybrid", "online"],
+    "require_explicit_external_enable": true
+  },
+  "budgets": {
+    "cpu": 2,
+    "memory_mb": 1024,
+    "queue_depth": 100,
+    "repair_attempts": 5,
+    "external_calls": 10
+  },
+  "services": {
+    "core": ["ingestion-leader", "stability-kernel", "netwatch"],
+    "external": []
+  },
+  "contracts": [
+    "event_v1",
+    "health_v1",
+    "promotion_v1",
+    "anomaly_v1",
+    "external_action_v1"
+  ],
+  "promotion": {
+    "require_tests": true,
+    "require_policy": true,
+    "require_reliability": true
+  }
+}
