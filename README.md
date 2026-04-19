@@ -86,55 +86,12 @@ event pressure → mesh discovery → agent execution → state logging → feed
 
 ---
 
-## 🚀 Quick Start
-
-### 1. Build Images
-
-```bash
-docker-compose build mesh-registry autoscaler opencode openwolf composio
-```
-
-### 2. Start System
-
-```bash
-docker-compose up -d
-```
-
-### 3. Verify
-
-```bash
-curl http://localhost:7000/api/mesh | jq
-```
-
-Expected:
-```json
-{
-  "services": 3,
-  "instances": 3,
-  "capabilities": 15
-}
-```
-
-### 4. Test Capability
-
-**Terminal 1:**
-```bash
-docker exec ark-nats nats sub "ark.reply.test-001" --raw
-```
-
-**Terminal 2:**
-```bash
-docker exec ark-nats nats pub "ark.call.opencode.code.analyze" \
-'{"request_id":"test-001","params":{"source":"def foo(): pass","language":"python"}}'
-```
-
----
-
 ## 📚 Documentation
 
 | Document | Purpose |
 |----------|---------|
 | **ARK_SPEC.md** | Complete architecture specification |
+| **TRISCA.md** | Distribution-aware scoring & control framework |
 | **DEPLOYMENT_GUIDE.md** | Step-by-step deployment instructions |
 | **QUICK_REFERENCE.md** | Command reference & troubleshooting |
 | **EXAMPLES.md** | Code examples for integration |
@@ -353,6 +310,7 @@ docker-compose up -d my-agent
 ├── Dockerfile.*                       # Service images
 ├── docker-compose.yml                 # Stack definition
 ├── ARK_SPEC.md                       # Architecture
+├── TRISCA.md                         # Scoring framework
 ├── DEPLOYMENT_GUIDE.md               # Setup instructions
 ├── QUICK_REFERENCE.md                # Commands
 ├── EXAMPLES.md                       # Integration code
@@ -394,6 +352,7 @@ docker-compose up -d my-agent
 ## 📞 Support & Resources
 
 - **Architecture**: See `ARK_SPEC.md`
+- **TRISCA**: See `TRISCA.md`
 - **Setup**: See `DEPLOYMENT_GUIDE.md`
 - **Commands**: See `QUICK_REFERENCE.md`
 - **Examples**: See `EXAMPLES.md`
