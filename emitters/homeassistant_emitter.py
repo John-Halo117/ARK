@@ -7,12 +7,12 @@ Bridges Home Assistant events into NATS for processing by agents
 import asyncio
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
 from typing import Dict, Any, List
 
 import aiohttp
+from ark.config import load_homeassistant_config
 from ark.security import validate_entity_id
 import nats
 from nats.errors import Error as NATSError
@@ -35,11 +35,12 @@ class HomeAssistantEmitter:
     """Emits Home Assistant state changes and events into ARK"""
     
     def __init__(self):
+        config = load_homeassistant_config()
         self.service_name = "homeassistant"
-        self.instance_id = os.environ.get('INSTANCE_ID', str(uuid.uuid4())[:12])
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.ha_url = os.environ.get('HA_URL', 'http://homeassistant:8123')
-        self.ha_token = os.environ.get('HA_TOKEN', '')
+        self.instance_id = config.runtime.instance_id
+        self.nats_url = config.runtime.nats_url
+        self.ha_url = config.ha_url
+        self.ha_token = config.ha_token
         
         self.capabilities = [
             "event.home_assistant",
@@ -194,6 +195,7 @@ class HomeAssistantEmitter:
                 "entity_id": entity_id,
                 "old_state": old_state,
                 "new_state": new_state,
+                "value": value,
                 "attributes": attributes,
                 "timestamp": datetime.utcnow().isoformat(),
                 "source": "homeassistant"

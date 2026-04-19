@@ -1,7 +1,5 @@
 """Tests for ark.duck_client module."""
 
-import json
-import os
 
 import pytest
 

@@ -1,11 +1,9 @@
 """Tests for ark.mesh_registry module."""
 
-import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 from ark.mesh_registry import MeshRegistry, ServiceInstance
 

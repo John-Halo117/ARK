@@ -10,14 +10,12 @@ import logging
 import subprocess
 import uuid
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List
 
-import nats
 from nats.errors import Error as NATSError
 
 from ark.security import (
     build_safe_docker_cmd,
-    sanitize_string,
     validate_docker_arg,
     validate_service_name,
 )

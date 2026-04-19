@@ -7,15 +7,13 @@ Routes to: Mesh, DuckDB, agents, storage
 import asyncio
 import json
 import logging
-import os
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 
 import aiohttp
-import nats
 from aiohttp import web
+from ark.config import load_gateway_config
 from ark.duck_client import DuckClient
-from ark.event_schema import create_event, EventType, EventSource
 from ark.security import (
     auth_middleware,
     clamp_limit,
@@ -46,8 +44,9 @@ class ARKGateway:
     """API Gateway for ARK system"""
     
     def __init__(self):
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.mesh_url = os.environ.get('MESH_URL', 'http://ark-mesh:7000')
+        config = load_gateway_config()
+        self.nats_url = config.nats_url
+        self.mesh_url = config.mesh_url
         self._nats = ResilientNATSConnection(self.nats_url)
         self.nc = None
         self.js = None
@@ -176,7 +175,7 @@ class ARKGateway:
                 "status": "queued"
             })
         
-        except Exception as e:
+        except Exception:
             logger.exception("Capability call error")
             return web.json_response({"error": "capability call failed"}, status=500)
     

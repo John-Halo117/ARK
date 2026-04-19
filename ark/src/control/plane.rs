@@ -34,11 +34,7 @@ impl Engine {
 
         let ts = chrono::Utc::now().timestamp() as u64;
 
-        let delta: Option<Delta> = if let Some(prev) = &self.prev {
-            Some(delta_compute(prev, &lks))
-        } else {
-            None
-        };
+        let delta: Option<Delta> = self.prev.as_ref().map(|prev| delta_compute(prev, &lks));
 
         let decision = decide(&lks);
 
@@ -63,5 +59,11 @@ impl Engine {
         append(&e);
 
         self.prev = Some(lks);
+    }
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
     }
 }
