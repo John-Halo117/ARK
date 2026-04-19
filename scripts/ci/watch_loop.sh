@@ -10,8 +10,7 @@ while true; do
     tail -n +2 "$QUEUE" > "$QUEUE.tmp" && mv "$QUEUE.tmp" "$QUEUE"
     if acquire_lock; then
       log "Processing $COMMIT"
-      git checkout "$COMMIT"
-      if bash scripts/ci/run_once.sh; then
+      if bash scripts/ci/run_once.sh "$COMMIT"; then
         log "PASS $COMMIT"
       else
         log "FAIL $COMMIT"
