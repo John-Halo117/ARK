@@ -1,6 +1,5 @@
 """Tests for agents.rube.agent module."""
 
-import pytest
 
 from agents.rube.agent import Agent
 

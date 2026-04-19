@@ -7,12 +7,12 @@ Emits media events into ARK for processing
 import asyncio
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 import aiohttp
+from ark.config import load_jellyfin_config
 import nats
 from nats.errors import Error as NATSError
 
@@ -33,12 +33,13 @@ class JellyfinEmitter:
     """Emits Jellyfin media events into ARK"""
     
     def __init__(self):
+        config = load_jellyfin_config()
         self.service_name = "jellyfin"
-        self.instance_id = os.environ.get('INSTANCE_ID', str(uuid.uuid4())[:12])
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.jellyfin_url = os.environ.get('JELLYFIN_URL', 'http://jellyfin:8096')
-        self.jellyfin_token = os.environ.get('JELLYFIN_TOKEN', '')
-        self.jellyfin_user_id = os.environ.get('JELLYFIN_USER_ID', '')
+        self.instance_id = config.runtime.instance_id
+        self.nats_url = config.runtime.nats_url
+        self.jellyfin_url = config.jellyfin_url
+        self.jellyfin_token = config.jellyfin_token
+        self.jellyfin_user_id = config.jellyfin_user_id
         
         self.capabilities = [
             "media.playback",

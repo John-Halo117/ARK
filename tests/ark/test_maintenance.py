@@ -2,9 +2,8 @@
 periodic tasks, resilient NATS connection, cleanup helpers."""
 
 import asyncio
-import time
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 from ark.maintenance import (
     ShutdownCoordinator,

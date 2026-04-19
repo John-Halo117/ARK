@@ -7,12 +7,12 @@ Emits network events into ARK for processing
 import asyncio
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
 from typing import Dict, Any, List
 
 import aiohttp
+from ark.config import load_unifi_config
 import nats
 from nats.errors import Error as NATSError
 
@@ -33,13 +33,15 @@ class UniFiEmitter:
     """Emits UniFi network events into ARK"""
     
     def __init__(self):
+        config = load_unifi_config()
         self.service_name = "unifi"
-        self.instance_id = os.environ.get('INSTANCE_ID', str(uuid.uuid4())[:12])
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.unifi_url = os.environ.get('UNIFI_URL', 'https://unifi:8443')
-        self.unifi_username = os.environ.get('UNIFI_USERNAME', '')
-        self.unifi_password = os.environ.get('UNIFI_PASSWORD', '')
-        self.unifi_site = os.environ.get('UNIFI_SITE', 'default')
+        self.instance_id = config.runtime.instance_id
+        self.nats_url = config.runtime.nats_url
+        self.unifi_url = config.unifi_url
+        self.unifi_username = config.unifi_username
+        self.unifi_password = config.unifi_password
+        self.unifi_site = config.unifi_site
+        self.unifi_ca_bundle = config.unifi_ca_bundle
         
         self.capabilities = [
             "network.devices",
@@ -64,15 +66,14 @@ class UniFiEmitter:
         try:
             # UniFi controllers typically use self-signed certificates.
             # Set UNIFI_CA_BUNDLE to a CA cert path to enable verification.
-            ca_bundle = os.environ.get('UNIFI_CA_BUNDLE', '')
-            if ca_bundle:
+            if self.unifi_ca_bundle:
                 try:
                     import ssl as _ssl
-                    ssl_ctx = _ssl.create_default_context(cafile=ca_bundle)
+                    ssl_ctx = _ssl.create_default_context(cafile=self.unifi_ca_bundle)
                     connector = aiohttp.TCPConnector(ssl=ssl_ctx)
                 except (FileNotFoundError, OSError) as e:
                     logger.warning(
-                        f"UNIFI_CA_BUNDLE path '{ca_bundle}' is invalid ({e}). "
+                        f"UNIFI_CA_BUNDLE path '{self.unifi_ca_bundle}' is invalid ({e}). "
                         "Falling back to SSL verification disabled."
                     )
                     connector = aiohttp.TCPConnector(ssl=False)

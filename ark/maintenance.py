@@ -4,16 +4,13 @@ shutdown coordination, periodic cleanup, and structured diagnostics.
 """
 
 import asyncio
-import json
 import logging
-import os
 import signal
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 import nats
-from nats.errors import Error as NATSError
 
 logger = logging.getLogger("ARK-Maintenance")
 
