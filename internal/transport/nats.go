@@ -129,6 +129,15 @@ func (c *NATSClient) Request(subject string, payload []byte, timeout time.Durati
 		if line == "PONG" || line == "+OK" || line == "" {
 			continue
 		}
+		if line == "PING" {
+			if _, err := c.rw.WriteString("PONG\r\n"); err != nil {
+				return nil, err
+			}
+			if err := c.rw.Flush(); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if strings.HasPrefix(line, "-ERR") {
 			return nil, errors.New(line)
 		}

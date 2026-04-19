@@ -19,11 +19,11 @@ func (Source) Load(ctx context.Context, repoPath, commitSHA string) (ingestion.C
 	if err != nil {
 		return ingestion.CommitPayload{}, err
 	}
-	parts := strings.SplitN(string(out), "\n", 4)
-	if len(parts) < 4 {
+	parts := strings.SplitN(string(out), "\n", 3)
+	if len(parts) < 3 {
 		return ingestion.CommitPayload{}, errors.New("unexpected git show output")
 	}
-	rest := parts[3]
+	rest := parts[2]
 	msgAndDiff := strings.SplitN(rest, "diff --git", 2)
 	diff := ""
 	if len(msgAndDiff) > 1 {
