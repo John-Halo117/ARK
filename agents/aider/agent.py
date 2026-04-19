@@ -85,11 +85,13 @@ class AiderAgent:
         self._max_metric_history = 100
         self.ashi_score = 100
 
-        # Composio profile state
-        composio_cfg = load_composio_config()
-        self.composio_api_key = composio_cfg.composio_api_key
+        # Composio profile state — only load when needed
         if self.service_name == "composio":
+            composio_cfg = load_composio_config()
+            self.composio_api_key = composio_cfg.composio_api_key
             self.health.register("composio_api", lambda: bool(self.composio_api_key))
+        else:
+            self.composio_api_key = ""
 
     async def connect(self):
         self.nc = await self._nats.connect()
@@ -135,13 +137,16 @@ class AiderAgent:
         try:
             sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
             async for msg in sub.messages:
-                capability = parse_capability_from_subject(msg.subject)
-                payload = json.loads(msg.data.decode())
-                request_id = payload.get("request_id", str(uuid.uuid4())[:12])
-                params = payload.get("params", {})
-                result = await self.handle_capability(capability, params)
-                await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
-                self.request_count += 1
+                try:
+                    capability = parse_capability_from_subject(msg.subject)
+                    payload = json.loads(msg.data.decode())
+                    request_id = payload.get("request_id", str(uuid.uuid4())[:12])
+                    params = payload.get("params", {})
+                    result = await self.handle_capability(capability, params)
+                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
+                    self.request_count += 1
+                except Exception as exc:
+                    logger.error("Error processing call: %s", exc)
         except NATSError as exc:
             logger.error("Subscription error: %s", exc)
 
@@ -169,7 +174,7 @@ class AiderAgent:
         return await handler(params)
 
     async def analyze_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        source = params.get("source", "")
+        source = sanitize_string(params.get("source", ""), 100_000)
         language = sanitize_string(params.get("language", "python"), 32)
         return {
             "agent": self.service_name,
@@ -184,7 +189,7 @@ class AiderAgent:
         }
 
     async def transform_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        source = params.get("source", "")
+        source = sanitize_string(params.get("source", ""), 100_000)
         transform_type = sanitize_string(params.get("type", "refactor"), 64)
         return {
             "agent": self.service_name,
@@ -233,11 +238,15 @@ class AiderAgent:
         history = self.metric_history.get(metric, [])
         if len(history) < 5:
             return False
-        baseline = mean(history)
-        sigma = stdev(history) if len(history) > 1 else 0.0
-        if sigma == 0:
-            return value > baseline * 1.5
-        return value > baseline + (3.0 * sigma)
+        try:
+            baseline = mean(history[:-1])
+            sigma = stdev(history[:-1]) if len(history) > 2 else 1.0
+            if sigma == 0:
+                sigma = 1.0
+            z_score = abs(value - baseline) / sigma
+            return z_score > 3.0
+        except Exception:
+            return False
 
     async def detect_anomaly(self, params: Dict[str, Any]) -> Dict[str, Any]:
         metric = sanitize_string(params.get("metric", "unknown"), 128)
@@ -342,7 +351,7 @@ class AiderAgent:
             "channel": channel,
             "message_length": len(message),
             "success": bool(self.composio_api_key),
-            "message": "Slack message queued" if self.composio_api_key else "Composio not configured",
+            "status_message": "Slack message queued" if self.composio_api_key else "Composio not configured",
             "timestamp": datetime.utcnow().isoformat(),
         }
 
