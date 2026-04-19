@@ -13,7 +13,8 @@ while true; do
       if bash scripts/ci/run_once.sh "$COMMIT"; then
         log "PASS $COMMIT"
       else
-        log "FAIL $COMMIT"
+        log "FAIL $COMMIT → starting repair loop"
+        python3 scripts/ai/autonomous_repair.py || true
       fi
     fi
   fi
