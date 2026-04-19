@@ -11,6 +11,9 @@ pushd "$WT" >/dev/null
 
 bash scripts/ci/policy_gate.sh || { write_result "$COMMIT" "fail" "policy_gate"; exit 1; }
 
+# snapshot config before deploy
+bash scripts/ci/snapshot_config.sh
+
 if command -v go >/dev/null 2>&1; then
   go test ./... || { write_result "$COMMIT" "fail" "go test"; exit 1; }
 fi
