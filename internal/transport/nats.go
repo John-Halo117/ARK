@@ -75,6 +75,9 @@ func (c *NATSClient) sendConnect() error {
 func (c *NATSClient) Publish(subject string, payload []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := c.drainControlFrames(); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(c.rw, "PUB %s %d\r\n", subject, len(payload)); err != nil {
 		return err
 	}
@@ -84,7 +87,10 @@ func (c *NATSClient) Publish(subject string, payload []byte) error {
 	if _, err := c.rw.WriteString("\r\n"); err != nil {
 		return err
 	}
-	return c.rw.Flush()
+	if err := c.rw.Flush(); err != nil {
+		return err
+	}
+	return c.drainControlFrames()
 }
 
 func (c *NATSClient) Request(subject string, payload []byte, timeout time.Duration) ([]byte, error) {
@@ -129,6 +135,15 @@ func (c *NATSClient) Request(subject string, payload []byte, timeout time.Durati
 		if line == "PONG" || line == "+OK" || line == "" {
 			continue
 		}
+		if line == "PING" {
+			if _, err := c.rw.WriteString("PONG\r\n"); err != nil {
+				return nil, err
+			}
+			if err := c.rw.Flush(); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if strings.HasPrefix(line, "-ERR") {
 			return nil, errors.New(line)
 		}
@@ -151,6 +166,52 @@ func (c *NATSClient) Request(subject string, payload []byte, timeout time.Durati
 				return nil, err
 			}
 			return buf, nil
+		}
+	}
+}
+
+func (c *NATSClient) drainControlFrames() error {
+	for {
+		_ = c.conn.SetReadDeadline(time.Now().Add(2 * time.Millisecond))
+		line, err := c.rw.ReadString('\n')
+		if err != nil {
+			var nerr net.Error
+			if errors.As(err, &nerr) && nerr.Timeout() {
+				_ = c.conn.SetReadDeadline(time.Time{})
+				return nil
+			}
+			_ = c.conn.SetReadDeadline(time.Time{})
+			return err
+		}
+		_ = c.conn.SetReadDeadline(time.Time{})
+		line = strings.TrimSpace(line)
+		switch {
+		case line == "", line == "+OK", strings.HasPrefix(line, "INFO "), line == "PONG":
+			continue
+		case line == "PING":
+			if _, err := c.rw.WriteString("PONG\r\n"); err != nil {
+				return err
+			}
+			if err := c.rw.Flush(); err != nil {
+				return err
+			}
+		case strings.HasPrefix(line, "MSG "):
+			parts := strings.Fields(line)
+			if len(parts) < 4 {
+				return fmt.Errorf("invalid nats msg line: %s", line)
+			}
+			n, err := strconv.Atoi(parts[len(parts)-1])
+			if err != nil {
+				return err
+			}
+			buf := make([]byte, n+2)
+			if _, err := io.ReadFull(c.rw, buf); err != nil {
+				return err
+			}
+		case strings.HasPrefix(line, "-ERR"):
+			return errors.New(line)
+		default:
+			return fmt.Errorf("unexpected nats frame: %s", line)
 		}
 	}
 }

@@ -29,13 +29,22 @@ type fakeStore struct {
 	pending  bool
 	reserved bool
 	seq      uint64
+	commitErr error
+	commits   int
 }
 
 func (f *fakeStore) Reserve(string) (bool, error) { return f.reserved, nil }
 func (f *fakeStore) Get(string) (DedupeRecord, bool, bool, error) {
 	return f.rec, f.found, f.pending, nil
 }
-func (f *fakeStore) Commit(_ string, rec DedupeRecord) error { f.rec, f.found = rec, true; return nil }
+func (f *fakeStore) Commit(_ string, rec DedupeRecord) error {
+	f.commits++
+	if f.commitErr != nil {
+		return f.commitErr
+	}
+	f.rec, f.found = rec, true
+	return nil
+}
 func (f *fakeStore) Release(string) error                    { return nil }
 func (f *fakeStore) NextSequence() (uint64, error)           { return f.seq, nil }
 
@@ -80,6 +89,30 @@ func TestIngest_PublishesOnce(t *testing.T) {
 	}
 	if _, err := json.Marshal(evt); err != nil {
 		t.Fatalf("event must be json serializable: %v", err)
+	}
+}
+
+func TestIngest_DoesNotPublishIfCommitFails(t *testing.T) {
+	pub := &fakePub{}
+	store := &fakeStore{reserved: true, seq: 11, commitErr: errors.New("redis unavailable")}
+	svc := &Service{
+		Source:    fakeSource{payload: CommitPayload{RepoPath: "/tmp/repo", SHA: "abcdef1", Author: "a", Date: time.Now().UTC().Format(time.RFC3339), Message: "m", Diff: "d"}},
+		Store:     store,
+		Publisher: pub,
+		Stability: fakeEval{},
+	}
+	_, deduped, err := svc.IngestGitCommit(context.Background(), IngestRequest{RepoPath: "/tmp/repo", CommitSHA: "abcdef1"})
+	if err == nil || !strings.Contains(err.Error(), "dedupe commit") {
+		t.Fatalf("expected commit error, got %v", err)
+	}
+	if deduped {
+		t.Fatal("expected non-deduped result")
+	}
+	if pub.published != 0 {
+		t.Fatalf("publish must not happen when commit fails, published=%d", pub.published)
+	}
+	if store.commits != 1 {
+		t.Fatalf("commit should be attempted exactly once, got %d", store.commits)
 	}
 }
 
