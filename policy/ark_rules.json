@@ -1,0 +1,36 @@
+{
+  "bounded": {
+    "max_runtime_seconds": 300,
+    "max_retries": 5,
+    "max_recursion_depth": 3
+  },
+  "resources": {
+    "cpu_limit": "2",
+    "memory_limit_mb": 1024
+  },
+  "health": {
+    "heartbeat_required": true,
+    "max_staleness_seconds": 30
+  },
+  "state": {
+    "allow_global_state": false
+  },
+  "verification": {
+    "require_result_artifact": true,
+    "require_status_code": true
+  },
+  "flow": {
+    "require_linear_pipeline": true
+  },
+  "interfaces": {
+    "strict_schema": true
+  },
+  "failure": {
+    "fail_safe_on_anomaly": true,
+    "auto_rollback": true
+  },
+  "promotion": {
+    "require_tests_pass": true,
+    "require_reliability_threshold": 0.999
+  }
+}
