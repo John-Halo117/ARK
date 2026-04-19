@@ -1,0 +1,7 @@
+{
+  "cpu": {"limit": 2},
+  "memory_mb": {"limit": 1024},
+  "queue_depth": {"limit": 100},
+  "repair_attempts": {"limit": 5},
+  "external_calls": {"limit": 10}
+}
