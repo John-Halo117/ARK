@@ -7,12 +7,20 @@ import (
 	"time"
 
 	"github.com/John-Halo117/ARK/arkfield/internal/config"
+	"github.com/John-Halo117/ARK/arkfield/internal/crypto"
 	"github.com/John-Halo117/ARK/arkfield/internal/runtime"
 	"github.com/John-Halo117/ARK/arkfield/internal/stability"
 )
 
+var lastAuditHash string
+
 func main() {
 	cfg := config.LoadRuntimeConfig(":8082")
+
+	priv, err := crypto.LoadPrivateKeyFromSeedHex(cfg.SigningSeedHex)
+	if err != nil {
+		log.Fatalf("missing signing key: %v", err)
+	}
 
 	kernel, _ := stability.New(stability.Config{
 		AlphaMax: 0.3,
@@ -27,16 +35,15 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/identity", runtime.WithTrace(runtime.RequireMethod("GET", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"service": cfg.ServiceName,
-			"loop": []string{"sense","compress","judge","act","verify","remember"},
-			"mode": cfg.ConnectivityMode,
-		})
+	mux.Handle("/verify", runtime.WithTrace(runtime.RequireMethod("POST", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var env crypto.Envelope
+		json.NewDecoder(r.Body).Decode(&env)
+		ok := crypto.VerifyEnvelope(env)
+		json.NewEncoder(w).Encode(map[string]bool{"valid": ok})
 	}))))
 
-	mux.Handle("/config", runtime.WithTrace(runtime.RequireMethod("GET", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		json.NewEncoder(w).Encode(cfg)
+	mux.Handle("/audit/root", runtime.WithTrace(runtime.RequireMethod("GET", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"last": lastAuditHash})
 	}))))
 
 	mux.Handle("/gate", runtime.WithTrace(runtime.RequireAuth(cfg.APIToken, runtime.RequireMethod("POST", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +52,19 @@ func main() {
 		if obs.Elapsed == 0 {
 			obs.Elapsed = time.Second
 		}
+
 		decision := kernel.Evaluate(obs)
+		payload, _ := json.Marshal(decision)
+
+		env, _ := crypto.SignEnvelope(priv, payload)
+		entry, _ := crypto.AppendAudit(cfg.AuditLogPath, env.CID, lastAuditHash)
+		lastAuditHash = entry.Hash
+
 		if decision.Freeze {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}
-		json.NewEncoder(w).Encode(decision)
+
+		json.NewEncoder(w).Encode(env)
 	}))))
 
 	mux.Handle("/health", runtime.WithTrace(runtime.RequireMethod("GET", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
