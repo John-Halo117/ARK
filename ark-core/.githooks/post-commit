@@ -1,0 +1,25 @@
+#!/bin/sh
+#
+# ARK-Field v4.2 post-commit hook stub.
+# Install with:
+#   git config core.hooksPath .githooks
+#
+# Invariant: every structural mutation starts as a Git commit. This hook is the
+# hand-off point to the Ingestion Leader, which will normalize the diff, compute
+# the state hash, wrap the CID object, and publish the event after Stability
+# Kernel approval.
+
+set -eu
+
+HOOK_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+REPO_ROOT=$(git -C "$HOOK_DIR/.." rev-parse --show-toplevel 2>/dev/null || pwd)
+HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD)
+BRANCH_NAME=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
+
+cat <<EOF
+[ark-field] post-commit stub
+  repo:   $REPO_ROOT
+  branch: $BRANCH_NAME
+  commit: $HEAD_SHA
+  next:   ingestion-leader normalize-diff -> state_hash -> CID -> stability gate -> JetStream
+EOF

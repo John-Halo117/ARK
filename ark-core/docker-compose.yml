@@ -1,0 +1,204 @@
+name: ark-field-v4-2
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-go-service: &go-service
+  restart: unless-stopped
+  networks: [ark-field]
+  logging: *default-logging
+  init: true
+  depends_on:
+    nats:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    wireguard-sidecar:
+      condition: service_started
+  volumes:
+    - type: bind
+      source: ${ARK_NAS_PATH:-/mnt/nas}
+      target: /mnt/nas
+
+networks:
+  ark-field:
+    driver: bridge
+    enable_ipv6: true
+
+volumes:
+  nats_data:
+  redis_data:
+
+services:
+  nats:
+    image: nats:2.11-alpine
+    container_name: ark-field-nats
+    restart: unless-stopped
+    command:
+      - -js
+      - -sd
+      - /data
+      - -m
+      - "8222"
+      - -name
+      - ark-field
+    networks: [ark-field]
+    volumes:
+      - nats_data:/data
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: ark-field-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    networks: [ark-field]
+    volumes:
+      - redis_data:/data
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 0.75
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  stability-kernel:
+    <<: *go-service
+    container_name: ark-field-stability-kernel
+    build:
+      context: .
+      dockerfile: build/ark-field/Dockerfile
+      args:
+        SERVICE_PATH: ./cmd/stability-kernel
+    environment:
+      PORT: "8080"
+      STABILITY_S2_ANCHOR: S2
+      STABILITY_G_MAX: ${STABILITY_G_MAX:-0.25}
+      STABILITY_SIGMA_K: ${STABILITY_SIGMA_K:-2.2}
+      STABILITY_LAMBDA: ${STABILITY_LAMBDA:-0.08}
+      CAS_ROOT: /mnt/nas/cas
+    expose:
+      - "8080"
+    mem_limit: 256m
+    cpus: 0.75
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  ingestion-leader:
+    <<: *go-service
+    container_name: ark-field-ingestion-leader
+    build:
+      context: .
+      dockerfile: build/ark-field/Dockerfile
+      args:
+        SERVICE_PATH: ./cmd/ingestion-leader
+    environment:
+      PORT: "8080"
+      NATS_URL: nats://nats:4222
+      REDIS_ADDR: redis:6379
+      STABILITY_KERNEL_URL: http://stability-kernel:8080
+      CAS_ROOT: /mnt/nas/cas
+      CURSOR_CACHE_PREFIX: cursor:plan
+      MUTATION_BACKEND: aider
+      PLANNING_BACKEND: cursor
+    depends_on:
+      stability-kernel:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      wireguard-sidecar:
+        condition: service_started
+    ports:
+      - "${INGESTION_LEADER_PORT:-8081}:8080"
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  netwatch:
+    <<: *go-service
+    container_name: ark-field-netwatch
+    build:
+      context: .
+      dockerfile: build/ark-field/Dockerfile
+      args:
+        SERVICE_PATH: ./cmd/netwatch
+    environment:
+      PORT: "8080"
+      STABILITY_KERNEL_URL: http://stability-kernel:8080
+      NATS_URL: nats://nats:4222
+      REDIS_ADDR: redis:6379
+      CAS_ROOT: /mnt/nas/cas
+      AIDER_BIN: /usr/local/bin/aider
+      CURSOR_CACHE_PREFIX: cursor:plan
+      BROWSER_BURST_LIMIT: ${NETWATCH_BROWSER_BURST_LIMIT:-3}
+      PF_SENSE_ENDPOINT: ${PF_SENSE_ENDPOINT:-https://pfsense.local}
+      UNIFI_ENDPOINT: ${UNIFI_ENDPOINT:-https://unifi.local}
+    depends_on:
+      stability-kernel:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      wireguard-sidecar:
+        condition: service_started
+    ports:
+      - "${NETWATCH_PORT:-8082}:8080"
+    mem_limit: 256m
+    cpus: 0.75
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  wireguard-sidecar:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: ark-field-wireguard
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      PUID: ${WIREGUARD_PUID:-1000}
+      PGID: ${WIREGUARD_PGID:-1000}
+      TZ: ${WIREGUARD_TZ:-America/Los_Angeles}
+    sysctls:
+      net.ipv4.conf.all.src_valid_mark: "1"
+      net.ipv6.conf.all.disable_ipv6: "0"
+    networks: [ark-field]
+    volumes:
+      - ./mesh/wireguard:/config
+      - /lib/modules:/lib/modules:ro
+      - type: bind
+        source: ${ARK_NAS_PATH:-/mnt/nas}
+        target: /mnt/nas
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 0.5
