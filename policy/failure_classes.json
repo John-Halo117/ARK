@@ -1,0 +1,11 @@
+{
+  "failure_classes": [
+    "contract_failure",
+    "test_failure",
+    "integration_failure",
+    "resource_failure",
+    "topology_failure",
+    "policy_failure",
+    "reliability_failure"
+  ]
+}
