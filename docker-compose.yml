@@ -121,42 +121,6 @@ services:
     networks:
       - ark-net
 
-  # INTELLIGENCE LAYER - OpenCode
-  opencode:
-    build:
-      context: .
-      dockerfile: Dockerfile.opencode
-    container_name: ark-opencode
-    environment:
-      INSTANCE_ID: opencode-0
-      NATS_URL: nats://nats:4222
-      PYTHONUNBUFFERED: "1"
-    ports:
-      - "6001:6001"
-    depends_on:
-      nats:
-        condition: service_healthy
-    networks:
-      - ark-net
-
-  # INTELLIGENCE LAYER - OpenWolf
-  openwolf:
-    build:
-      context: .
-      dockerfile: Dockerfile.openwolf
-    container_name: ark-openwolf
-    environment:
-      INSTANCE_ID: openwolf-0
-      NATS_URL: nats://nats:4222
-      PYTHONUNBUFFERED: "1"
-    ports:
-      - "6002:6002"
-    depends_on:
-      nats:
-        condition: service_healthy
-    networks:
-      - ark-net
-
   # INTELLIGENCE LAYER - Composio Bridge
   composio:
     build:
@@ -354,6 +318,145 @@ services:
     networks:
       - ark-net
 
+
+  # ARK-FIELD v4.2 - Stage 1/2 Redis state backend
+  redis:
+    image: redis:7-alpine
+    container_name: ark-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ark-net
+
+  # ARK-FIELD v4.2 - Stage 1/2 Stability Kernel
+  stability-kernel:
+    build:
+      context: .
+      dockerfile: Dockerfile.stability-kernel
+    container_name: ark-stability-kernel
+    environment:
+      HTTP_ADDR: ":8081"
+      ENTROPY_GUARD: "1.0"
+      G_MAX: "0.8"
+      SIGMA_K: "2.2"
+      HYSTERESIS_LAMBDA: "0.08"
+      BACKPRESSURE_EPS: "0.1"
+      TIME_DECAY_RATE: "0.2"
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - ark-net
+
+  # ARK-FIELD v4.2 - Stage 1/2 Ingestion Leader (single writer)
+  ingestion-leader:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion-leader
+    container_name: ark-ingestion-leader
+    environment:
+      HTTP_ADDR: ":8080"
+      NATS_URL: nats://nats:4222
+      REDIS_ADDR: redis:6379
+      ENTROPY_GUARD: "1.0"
+      G_MAX: "0.8"
+      SIGMA_K: "2.2"
+      HYSTERESIS_LAMBDA: "0.08"
+      BACKPRESSURE_EPS: "0.1"
+      TIME_DECAY_RATE: "0.2"
+      CAS_ROOT: /cas
+    ports:
+      - "8088:8080"
+    volumes:
+      - /mnt/nas:/cas
+    depends_on:
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      stability-kernel:
+        condition: service_started
+    networks:
+      - ark-net
+
+  # ARK-FIELD v4.2 - Stage 1/2 NetWatch
+  netwatch:
+    build:
+      context: .
+      dockerfile: Dockerfile.netwatch
+    container_name: ark-netwatch
+    environment:
+      HTTP_ADDR: ":8082"
+      STABILITY_KERNEL_URL: http://stability-kernel:8081
+      WG_STATUS_SOURCE: /etc/wireguard
+    ports:
+      - "8082:8082"
+    depends_on:
+      stability-kernel:
+        condition: service_started
+      wireguard:
+        condition: service_started
+    networks:
+      - ark-net
+
+  # ARK-FIELD v4.2 - WireGuard mesh sidecar
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: ark-wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: UTC
+      SERVERURL: auto
+      SERVERPORT: 51820
+      PEERS: 3
+      PEERDNS: auto
+    ports:
+      - "51820:51820/udp"
+    volumes:
+      - wireguard_config:/config
+      - /lib/modules:/lib/modules:ro
+    restart: unless-stopped
+    networks:
+      - ark-net
+
+
+  # ARK-FIELD v4.2 - Stage 4 MQTT bridge
+  mqtt-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.mqtt-bridge
+    container_name: ark-mqtt-bridge
+    environment:
+      HTTP_ADDR: ":8090"
+      NATS_URL: nats://nats:4222
+      ENTROPY_GUARD: "1.0"
+      G_MAX: "0.8"
+      SIGMA_K: "2.2"
+      HYSTERESIS_LAMBDA: "0.08"
+      BACKPRESSURE_EPS: "0.1"
+      TIME_DECAY_RATE: "0.2"
+    ports:
+      - "8090:8090"
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - ark-net
+
 networks:
   ark-net:
     driver: bridge
@@ -369,3 +472,6 @@ volumes:
   jellyfin_data:
   jellyfin_cache:
   unifi_data:
+
+  redis_data:
+  wireguard_config:
