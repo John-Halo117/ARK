@@ -10,7 +10,7 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 import aiohttp
 import nats

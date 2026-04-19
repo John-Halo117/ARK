@@ -9,7 +9,7 @@ pub fn compute(data: &[f32]) -> LKS {
     sorted.sort_by(|a,b| a.partial_cmp(b).unwrap());
 
     let n = sorted.len();
-    let qs = (n + 4) / 5;
+    let qs = n.div_ceil(5);
 
     let mean = |s:usize,c:usize| {
         let e = (s+c).min(n);

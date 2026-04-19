@@ -7,16 +7,13 @@ Manages dynamic service registration, health, and routing decisions
 import asyncio
 import json
 import logging
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-import nats
 from nats.errors import Error as NATSError
 
 from ark.security import (
     registration_rate_limiter,
-    sanitize_string,
     validate_capability,
     validate_instance_id,
     validate_service_name,

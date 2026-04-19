@@ -1,5 +1,3 @@
-use crate::types::LKS;
-
 /// Kalman filter for DSS smoothing.
 ///
 /// Tuning:
@@ -34,5 +32,11 @@ impl Kalman {
         self.p *= 1.0 - k;
 
         self.x
+    }
+}
+
+impl Default for Kalman {
+    fn default() -> Self {
+        Self::new()
     }
 }

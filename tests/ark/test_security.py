@@ -1,9 +1,7 @@
 """Tests for ark.security module — validation, sanitisation, rate limiting, auth, middleware."""
 
-import os
 import pytest
 import time
-from unittest.mock import AsyncMock, MagicMock
 
 from ark.security import (
     # Sanitisation
@@ -24,9 +22,6 @@ from ark.security import (
     clamp_limit,
     # Rate limiter
     RateLimiter,
-    api_rate_limiter,
-    registration_rate_limiter,
-    # Auth
     constant_time_compare,
     verify_bearer_token,
     generate_api_token,
@@ -38,7 +33,6 @@ from ark.security import (
     build_safe_docker_cmd,
     # Constants
     MAX_PAYLOAD_BYTES,
-    MAX_STRING_LEN,
 )
 
 

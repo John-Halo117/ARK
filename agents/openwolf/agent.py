@@ -13,10 +13,9 @@ from datetime import datetime
 from typing import Dict, Any, List
 from statistics import mean, stdev
 
-import nats
 from nats.errors import Error as NATSError
 
-from ark.security import sanitize_string, validate_payload, safe_log_event
+from ark.security import sanitize_string
 from ark.maintenance import ResilientNATSConnection, ShutdownCoordinator, HealthCheck
 from ark.subjects import (
     MESH_REGISTER, MESH_HEARTBEAT, METRICS_SUBSCRIBE, ANOMALY_DETECTED,
@@ -105,7 +104,7 @@ class OpenWolfAgent:
         """Subscribe to capability calls"""
         try:
             sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
-            logger.info(f"Subscribed to capability calls")
+            logger.info("Subscribed to capability calls")
             
             async for msg in sub.messages:
                 try:

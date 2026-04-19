@@ -10,7 +10,7 @@ fn main() {
     let mut engine = Engine::new();
 
     for i in 0..100 {
-        let audio_data = audio::extract(&vec![0.1 * i as f32, 0.5, 0.9]);
+        let audio_data = audio::extract(&[0.1 * i as f32, 0.5, 0.9]);
         engine.process("audio", audio_data);
 
         let text_data = text::extract("ark system evolving state");

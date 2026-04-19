@@ -194,6 +194,7 @@ class HomeAssistantEmitter:
                 "entity_id": entity_id,
                 "old_state": old_state,
                 "new_state": new_state,
+                "value": value,
                 "attributes": attributes,
                 "timestamp": datetime.utcnow().isoformat(),
                 "source": "homeassistant"

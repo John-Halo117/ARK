@@ -9,13 +9,11 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 
 import aiohttp
-import nats
 from aiohttp import web
 from ark.duck_client import DuckClient
-from ark.event_schema import create_event, EventType, EventSource
 from ark.security import (
     auth_middleware,
     clamp_limit,
@@ -176,7 +174,7 @@ class ARKGateway:
                 "status": "queued"
             })
         
-        except Exception as e:
+        except Exception:
             logger.exception("Capability call error")
             return web.json_response({"error": "capability call failed"}, status=500)
     
