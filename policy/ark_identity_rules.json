@@ -1,0 +1,30 @@
+{
+  "core_loop": ["sense", "compress", "judge", "act", "verify", "remember"],
+  "requirements": {
+    "sense": {
+      "must_emit_health": true,
+      "must_emit_metrics": true
+    },
+    "compress": {
+      "no_raw_metric_cross_boundary": true,
+      "must_use_deltas": true,
+      "must_dedupe": true
+    },
+    "judge": {
+      "all_actions_require_kernel": true,
+      "all_actions_require_policy": true
+    },
+    "act": {
+      "all_actions_bounded": true,
+      "must_define_timeout": true,
+      "must_define_budget": true
+    },
+    "verify": {
+      "post_action_check_required": true
+    },
+    "remember": {
+      "all_actions_logged": true,
+      "must_record_outcome": true
+    }
+  }
+}
