@@ -46,7 +46,7 @@ func (p *Projector) Replay(fromSeq, toSeq uint64) ([]models.Event, error) {
 		return nil, errors.New("invalid sequence range")
 	}
 	items := make([]models.Event, 0, toSeq-fromSeq+1)
-	for seq := fromSeq; seq <= toSeq; seq++ {
+	for seq := fromSeq; ; seq++ {
 		v, ok, err := p.Redis.Get(projectionKey(seq))
 		if err != nil {
 			return nil, err
@@ -55,10 +55,12 @@ func (p *Projector) Replay(fromSeq, toSeq uint64) ([]models.Event, error) {
 			continue
 		}
 		var ev models.Event
-		if err := json.Unmarshal([]byte(v), &ev); err != nil {
-			continue
+		if err := json.Unmarshal([]byte(v), &ev); err == nil {
+			items = append(items, ev)
 		}
-		items = append(items, ev)
+		if seq == toSeq {
+			break
+		}
 	}
 	return items, nil
 }
