@@ -6,10 +6,12 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
 type NATSClient struct {
+	mu   sync.Mutex
 	conn net.Conn
 	rw   *bufio.ReadWriter
 }
@@ -65,6 +67,9 @@ func (c *NATSClient) sendConnect() error {
 }
 
 func (c *NATSClient) Publish(subject string, payload []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if _, err := fmt.Fprintf(c.rw, "PUB %s %d\r\n", subject, len(payload)); err != nil {
 		return err
 	}
