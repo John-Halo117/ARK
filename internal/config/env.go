@@ -16,6 +16,10 @@ type RuntimeConfig struct {
 	HysteresisLambda  float64
 	BackpressureEps   float64
 	TimeDecayRate     float64
+	ServiceName       string
+	ConnectivityMode  string
+	AllowExternal     bool
+	APIToken          string
 }
 
 func LoadRuntimeConfig(defaultAddr string) RuntimeConfig {
@@ -29,6 +33,10 @@ func LoadRuntimeConfig(defaultAddr string) RuntimeConfig {
 		HysteresisLambda:  envFloatOr("HYSTERESIS_LAMBDA", 0.08),
 		BackpressureEps:   envFloatOr("BACKPRESSURE_EPS", 0.1),
 		TimeDecayRate:     envFloatOr("TIME_DECAY_RATE", 0.2),
+		ServiceName:       envOr("ARK_SERVICE_NAME", "ark-service"),
+		ConnectivityMode:  envOr("ARK_CONNECTIVITY_MODE", "offline"),
+		AllowExternal:     envBoolOr("ARK_ALLOW_EXTERNAL", false),
+		APIToken:          envOr("ARK_API_TOKEN", ""),
 	}
 }
 
@@ -53,6 +61,13 @@ func envDurationOr(k string, d time.Duration) time.Duration {
 		if t, err := time.ParseDuration(v); err == nil {
 			return t
 		}
+	}
+	return d
+}
+
+func envBoolOr(k string, d bool) bool {
+	if v := os.Getenv(k); v != "" {
+		return v == "1" || v == "true" || v == "TRUE"
 	}
 	return d
 }
