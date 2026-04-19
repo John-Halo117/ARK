@@ -20,6 +20,8 @@ type RuntimeConfig struct {
 	ConnectivityMode  string
 	AllowExternal     bool
 	APIToken          string
+	SigningSeedHex    string
+	AuditLogPath      string
 }
 
 func LoadRuntimeConfig(defaultAddr string) RuntimeConfig {
@@ -37,6 +39,8 @@ func LoadRuntimeConfig(defaultAddr string) RuntimeConfig {
 		ConnectivityMode:  envOr("ARK_CONNECTIVITY_MODE", "offline"),
 		AllowExternal:     envBoolOr("ARK_ALLOW_EXTERNAL", false),
 		APIToken:          envOr("ARK_API_TOKEN", ""),
+		SigningSeedHex:    envOr("ARK_SIGNING_SEED_HEX", ""),
+		AuditLogPath:      envOr("ARK_AUDIT_LOG_PATH", "audit.log"),
 	}
 }
 
