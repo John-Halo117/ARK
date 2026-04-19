@@ -1,1 +1,33 @@
-[]
+- id: ark_forward_state_changes
+  alias: ARK Forward State Changes
+  description: Forward Home Assistant state changes into the ARK SSOT webhook.
+  mode: queued
+  max: 50
+  trigger:
+    - platform: event
+      event_type: state_changed
+  condition:
+    - condition: template
+      value_template: >
+        {{ trigger.event.data is defined and trigger.event.data.new_state is not none }}
+    - condition: template
+      value_template: >
+        {{ trigger.event.data.entity_id is defined and not trigger.event.data.entity_id.startswith('automation.') }}
+  action:
+    - service: rest_command.ark_emit_state_change
+      data:
+        payload: >
+          {{
+            {
+              "entity_id": trigger.event.data.entity_id,
+              "state": trigger.event.data.new_state.state,
+              "last_changed": trigger.event.data.new_state.last_changed,
+              "last_updated": trigger.event.data.new_state.last_updated,
+              "context": {
+                "id": trigger.event.data.new_state.context.id if trigger.event.data.new_state.context is not none else none,
+                "parent_id": trigger.event.data.new_state.context.parent_id if trigger.event.data.new_state.context is not none else none,
+                "user_id": trigger.event.data.new_state.context.user_id if trigger.event.data.new_state.context is not none else none
+              },
+              "attributes": trigger.event.data.new_state.attributes
+            } | tojson
+          }}

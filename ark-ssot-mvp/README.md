@@ -16,7 +16,7 @@ This repo is the standalone Phase 0 single-source-of-truth MVP. It keeps the run
 - `compute/duckdb/ark_current.sql` exposes a read-only current-state view contract.
 - `insight/grafana/autonomy-dashboard.json` is the Grafana v11 dashboard.
 - `infra/` contains the compose stack and environment template.
-- `apps/docker-compose.yml` is an optional stack for Home Assistant, Jellyfin, and UniFi Network Application (with MongoDB); config and runtime data live under `apps/`.
+- `apps/docker-compose.yml` is a separate app stack for Home Assistant, Jellyfin, UniFi Network Application, and an app-side bridge that forwards events into n8n.
 - `vendor/ultimate-jellyfin-stack/` holds a reference Jellyfin compose layout.
 
 ## Quick start
@@ -74,6 +74,22 @@ docker compose exec ollama ollama pull $env:ARK_OLLAMA_MODEL
 
 - create a PostgreSQL datasource that points to `postgres:5432`, database `ark_ssot`, user `ark`
 - import `insight/grafana/autonomy-dashboard.json`
+
+## App stitching
+
+The app stack is separate from `infra`, but it now feeds the same SSOT loop:
+
+- Home Assistant posts `state_changed` events directly to `http://host.docker.internal:5678/webhook/ark/homeassistant`.
+- `app-bridge` tails Jellyfin and UniFi runtime logs, emits service health, and forwards app events into the matching n8n hooks.
+- Bridge offsets persist in `apps/runtime/bridge/bridge-state.json` so restarts do not replay the whole log.
+
+Start the app stack from `ark-ssot-mvp/apps`:
+
+```powershell
+Copy-Item .env.example .env -Force
+New-Item -ItemType Directory -Force -Path .\runtime\bridge, .\runtime\jellyfin\transcode | Out-Null
+docker compose up -d --build
+```
 
 ## Operational notes
 

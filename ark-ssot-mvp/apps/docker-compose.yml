@@ -5,22 +5,6 @@ networks:
       config:
         - subnet: 172.19.0.0/16
 
-volumes:
-  jellyfin-config:
-    driver: local
-  jellyfin-transcode:
-    driver: local
-  homeassistant-config:
-    driver: local
-  unifi-config:
-    driver: local
-  unifi-db:
-    driver: local
-  unifi-protect-config:
-    driver: local
-  unifi-protect-logs:
-    driver: local
-
 services:
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:2024.4
@@ -34,8 +18,10 @@ services:
     ports:
       - "${ARK_HOMEASSISTANT_PORT}:8123"
     volumes:
-      - homeassistant-config:/config
+      - ./homeassistant/config:/config
       - ${ARK_MEDIA_DIR}:/media:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     deploy:
       resources:
         limits:
@@ -73,8 +59,8 @@ services:
       - "${ARK_JELLYFIN_PORT}:8096"
       - "${ARK_JELLYFIN_HTTPS_PORT}:8920"
     volumes:
-      - jellyfin-config:/config
-      - jellyfin-transcode:/transcode
+      - ${ARK_JELLYFIN_CONFIG_DIR}:/config
+      - ./runtime/jellyfin/transcode:/transcode
       - ${ARK_MEDIA_DIR}:/media:ro
     deploy:
       resources:
@@ -110,7 +96,7 @@ services:
       MONGO_DBNAME: ${UNIFI_MONGO_DB}
       MONGO_AUTHSOURCE: admin
     volumes:
-      - unifi-db:/data/db
+      - ${ARK_UNIFI_DB_DIR}:/data/db
       - ./unifi/init-mongo.sh:/docker-entrypoint-initdb.d/init-mongo.sh:ro
     command:
       - mongod
@@ -170,7 +156,7 @@ services:
       - "${ARK_UNIFI_L2_PORT}:1900/udp"
       - "${ARK_UNIFI_SYSLOG_PORT}:5514/udp"
     volumes:
-      - unifi-config:/config
+      - ${ARK_UNIFI_CONFIG_DIR}:/config
     deploy:
       resources:
         limits:
@@ -193,3 +179,38 @@ services:
       retries: 3
       start_period: 60s
     stop_grace_period: 30s
+
+  app-bridge:
+    build:
+      context: ./bridge
+    container_name: ark-app-bridge
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${ARK_TIMEZONE}
+      ARK_BRIDGE_STATE_PATH: /state/bridge-state.json
+      ARK_N8N_WEBHOOK_BASE: ${ARK_N8N_WEBHOOK_BASE}
+      ARK_HA_HEALTH_URL: http://homeassistant:8123/
+      ARK_JELLYFIN_HEALTH_URL: http://jellyfin:8096/health
+      ARK_UNIFI_HEALTH_URL: https://unifi:8443/status
+      ARK_BRIDGE_POLL_INTERVAL_SECONDS: ${ARK_BRIDGE_POLL_INTERVAL_SECONDS}
+      ARK_BRIDGE_HEALTH_INTERVAL_SECONDS: ${ARK_BRIDGE_HEALTH_INTERVAL_SECONDS}
+      ARK_BRIDGE_MAX_LINES_PER_POLL: ${ARK_BRIDGE_MAX_LINES_PER_POLL}
+    depends_on:
+      homeassistant:
+        condition: service_started
+      jellyfin:
+        condition: service_started
+      unifi:
+        condition: service_started
+    volumes:
+      - ./homeassistant/config:/sources/homeassistant:ro
+      - ${ARK_JELLYFIN_CONFIG_DIR}:/sources/jellyfin:ro
+      - ${ARK_UNIFI_CONFIG_DIR}:/sources/unifi:ro
+      - ./runtime/bridge:/state
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - unifi-net

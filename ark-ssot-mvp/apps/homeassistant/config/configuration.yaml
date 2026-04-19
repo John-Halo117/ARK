@@ -10,6 +10,14 @@ http:
     - 172.16.0.0/12
     - 192.168.0.0/16
 
+rest_command:
+  ark_emit_state_change:
+    url: !env_var ARK_HOMEASSISTANT_WEBHOOK_URL
+    method: POST
+    content_type: "application/json"
+    payload: >
+      {{ payload }}
+
 automation: !include automations.yaml
 script: !include scripts.yaml
 scene: !include scenes.yaml
