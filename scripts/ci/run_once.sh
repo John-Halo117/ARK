@@ -14,6 +14,9 @@ bash scripts/ci/policy_gate.sh || { write_result "$COMMIT" "fail" "policy_gate";
 # snapshot config before deploy
 bash scripts/ci/snapshot_config.sh
 
+# redteam gate
+bash scripts/ci/redteam.sh || { write_result "$COMMIT" "fail" "redteam"; exit 1; }
+
 if command -v go >/dev/null 2>&1; then
   go test ./... || { write_result "$COMMIT" "fail" "go test"; exit 1; }
 fi
