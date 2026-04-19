@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ark/contracts/anomaly_v1",
+  "type": "object",
+  "required": ["type", "severity", "timestamp"],
+  "properties": {
+    "type": {"type": "string"},
+    "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "details": {"type": "object"}
+  }
+}
