@@ -21,26 +21,20 @@ fi
 
 popd >/dev/null
 
-# enforce rolling reliability BEFORE deploy
 if ! python3 scripts/ci/reliability_gate.py; then
   write_result "$COMMIT" "fail" "reliability_gate"
-  log "CI blocked by 99.9% reliability requirement"
   exit 1
 fi
 
-# deploy ONLY if tests + reliability pass
 bash scripts/ci/deploy_local.sh "$WT"
 
-# verify
 if bash scripts/ci/smoke.sh; then
   write_result "$COMMIT" "pass" "ok"
   mark_last_good "$COMMIT"
   mark_current_deploy "$COMMIT"
-  queue_online_sync "$COMMIT"
-  log "CI success $COMMIT"
+  bash scripts/ci/promote.sh "$COMMIT"
 else
   write_result "$COMMIT" "fail" "smoke"
-  log "CI smoke failed $COMMIT"
   exit 1
 fi
 
