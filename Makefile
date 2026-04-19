@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: ci-once ci-loop smoke deploy-local install-hooks install-local-ci-service sync-online ai-enqueue ai-loop ai-assembly-line ai-apply ai-repair-last redteam
+.PHONY: ci-once ci-loop smoke deploy-local install-hooks install-local-ci-service sync-online ai-enqueue ai-loop ai-assembly-line ai-apply ai-repair-last redteam classify
 
 ci-once:
 	bash scripts/ci/run_once.sh "$$(git rev-parse HEAD)"
@@ -13,6 +13,9 @@ smoke:
 
 redteam:
 	bash scripts/ci/redteam.sh
+
+classify:
+	python3 scripts/ci/classify_todo.py
 
 deploy-local:
 	bash scripts/ci/deploy_local.sh "$$(pwd)"
