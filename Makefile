@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: ci-once ci-loop smoke deploy-local install-hooks install-local-ci-service sync-online ai-enqueue ai-loop ai-apply ai-repair-last
+.PHONY: ci-once ci-loop smoke deploy-local install-hooks install-local-ci-service sync-online ai-enqueue ai-loop ai-assembly-line ai-apply ai-repair-last
 
 ci-once:
 	bash scripts/ci/run_once.sh "$$(git rev-parse HEAD)"
@@ -28,6 +28,9 @@ ai-enqueue:
 
 ai-loop:
 	python3 scripts/ai/local_codegen_loop.py
+
+ai-assembly-line:
+	python3 scripts/ai/assembly_line.py
 
 ai-apply:
 	bash scripts/ai/apply_proposal.sh "$(PATCH)"
