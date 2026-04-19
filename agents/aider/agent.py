@@ -292,7 +292,7 @@ class AiderAgent:
             if values and await self.check_anomaly(metric, values[-1]):
                 anomalies += 1
         self.ashi_score = max(0, 100 - anomalies * 15)
-        level = "optimal" if self.ashi_score >= 90 else "stable" if self.ashi_score >= 70 else "degraded"
+        level = "optimal" if self.ashi_score >= 90 else "good" if self.ashi_score >= 70 else "fair" if self.ashi_score >= 50 else "critical"
         return {
             "agent": self.service_name,
             "instance_id": self.instance_id,
