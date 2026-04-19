@@ -19,7 +19,14 @@ fi
 
 popd >/dev/null
 
-# deploy ONLY if tests passed
+# enforce rolling reliability BEFORE deploy
+if ! python3 scripts/ci/reliability_gate.py; then
+  write_result "$COMMIT" "fail" "reliability_gate"
+  log "CI blocked by 99.9% reliability requirement"
+  exit 1
+fi
+
+# deploy ONLY if tests + reliability pass
 bash scripts/ci/deploy_local.sh "$WT"
 
 # verify
@@ -35,5 +42,4 @@ else
   exit 1
 fi
 
-# optional cleanup (keep last good cached)
 cleanup_worktree "$COMMIT"
