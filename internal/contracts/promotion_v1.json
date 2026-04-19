@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ark/contracts/promotion_v1",
+  "type": "object",
+  "required": ["commit", "status", "timestamp"],
+  "properties": {
+    "commit": {"type": "string"},
+    "status": {"type": "string", "enum": ["candidate", "staged", "promoted", "rejected"]},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "reason": {"type": "string"}
+  }
+}
