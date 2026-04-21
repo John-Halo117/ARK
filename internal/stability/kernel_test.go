@@ -44,3 +44,19 @@ func TestKernel_NoFreezePathOutputsSoftGate(t *testing.T) {
 		t.Fatalf("soft gate activation must be sigmoid output, got %f", d.Metrics.SoftGateActivation)
 	}
 }
+
+func TestKernel_EntropyGuardTriggersFreezeAndS2(t *testing.T) {
+	// EntropyGuard=1, probability mass is uniform over 8 buckets → entropy
+	// log2(8) = 3, which exceeds the guard and must freeze + activate S2.
+	k, err := New(Config{AlphaMax: 0.3, EntropyGuard: 1, GMax: 1, SigmaK: 10, HysteresisLambda: 10, BackpressureEps: 10, TimeDecayRate: 0.2, DefaultSoftWeight: SoftWeights{WA: 0.34, WK: 0.33, WG: 0.33}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := k.Evaluate(Observation{CurrentX: 0.3, TargetX: 0.35, Alpha: 0.1, Elapsed: time.Second, ProbabilityMass: []float64{0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125}, Sigma: 1, CNew: 0.4, COld: 0.3})
+	if !d.Freeze {
+		t.Fatalf("expected freeze due to entropy guard, got %+v", d)
+	}
+	if !d.S2Activated {
+		t.Fatalf("expected S2 activation when entropy guard trips, got %+v", d)
+	}
+}

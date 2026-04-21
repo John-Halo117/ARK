@@ -17,6 +17,15 @@ func TestReplayRangeFromQuery(t *testing.T) {
 	if _, _, err := ReplayRangeFromQuery("x", "3"); err == nil {
 		t.Fatal("expected invalid from error")
 	}
+	if _, _, err := ReplayRangeFromQuery("0", "3"); err == nil {
+		t.Fatal("expected zero from to be rejected")
+	}
+	if _, _, err := ReplayRangeFromQuery("1", "0"); err == nil {
+		t.Fatal("expected zero to to be rejected")
+	}
+	if _, _, err := ReplayRangeFromQuery("5", "3"); err == nil {
+		t.Fatal("expected to<from to be rejected")
+	}
 }
 
 func TestProjectorDuckProjectionAppend(t *testing.T) {

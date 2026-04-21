@@ -106,6 +106,7 @@ func main() {
 		_ = json.NewEncoder(w).Encode(decision)
 	})
 
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("stability-kernel listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }

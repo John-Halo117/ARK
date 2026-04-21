@@ -35,6 +35,7 @@ ark.<domain>.<action>[.<qualifier>…]
 | `anomaly` | Anomaly detection signals | `ark.anomaly.detected` |
 | `system` | Autoscaler demand/health signals | `ark.system.queue_depth.<service>`, `ark.system.ashi` |
 | `spawn` | Scaling lifecycle | `ark.spawn.confirmed` |
+| `events` | Canonical CID events from the single-writer ingestion leader, persisted on the `ARK_EVENTS` JetStream | `ark.events.cid` |
 
 ### 1.3 Wildcards
 

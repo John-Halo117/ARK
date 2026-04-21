@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 LAST_COMMIT="$(git rev-parse HEAD)"
-INGEST_URL="${ARK_INGEST_URL:-http://127.0.0.1:8080/v1/ingest/git-commit}"
+INGEST_URL="${ARK_INGEST_URL:-http://127.0.0.1:8088/v1/ingest/git-commit}"
 
 payload="$(printf '{"repo_path":"%s","commit_sha":"%s"}' "$REPO_ROOT" "$LAST_COMMIT")"
 

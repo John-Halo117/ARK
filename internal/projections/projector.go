@@ -51,12 +51,11 @@ func (p *Projector) Replay(fromSeq, toSeq uint64) ([]models.Event, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
-			continue
-		}
-		var ev models.Event
-		if err := json.Unmarshal([]byte(v), &ev); err == nil {
-			items = append(items, ev)
+		if ok {
+			var ev models.Event
+			if err := json.Unmarshal([]byte(v), &ev); err == nil {
+				items = append(items, ev)
+			}
 		}
 		if seq == toSeq {
 			break
@@ -101,6 +100,9 @@ func ReplayRangeFromQuery(fromRaw, toRaw string) (uint64, uint64, error) {
 	to, err := strconv.ParseUint(toRaw, 10, 64)
 	if err != nil {
 		return 0, 0, fmt.Errorf("invalid to: %w", err)
+	}
+	if from == 0 || to == 0 {
+		return 0, 0, errors.New("from and to must be >= 1")
 	}
 	if to < from {
 		return 0, 0, errors.New("to must be >= from")

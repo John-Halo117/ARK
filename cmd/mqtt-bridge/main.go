@@ -6,20 +6,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/John-Halo117/ARK/arkfield/internal/adapters/natspub"
+	"github.com/John-Halo117/ARK/arkfield/internal/adapters/ingestforward"
 	"github.com/John-Halo117/ARK/arkfield/internal/config"
 	"github.com/John-Halo117/ARK/arkfield/internal/stability"
-	"github.com/John-Halo117/ARK/arkfield/internal/transport"
 	"github.com/John-Halo117/ARK/arkfield/internal/wiring"
 )
 
 func main() {
 	addr := config.String("HTTP_ADDR", ":8090")
-	natsClient, err := transport.NewNATSClient(config.String("NATS_URL", "nats://nats:4222"), 5*time.Second)
-	if err != nil {
-		log.Fatalf("nats connect failed: %v", err)
-	}
-	defer func() { _ = natsClient.Close() }()
 
 	kernel, err := stability.New(stability.Config{
 		AlphaMax:         0.3,
@@ -39,10 +33,12 @@ func main() {
 		log.Fatalf("kernel config invalid: %v", err)
 	}
 
-	publisher := natspub.Publisher{Client: natsClient, Subject: "ark.events.cid", StreamName: "ARK_EVENTS"}
-	if err := publisher.EnsureStream(); err != nil {
-		log.Fatalf("jetstream ensure stream failed: %v", err)
-	}
+	// Route all MQTT-derived events through the ingestion-leader's
+	// single-writer forwarding endpoint. The mqtt-bridge must NOT publish
+	// directly to NATS — the ingestion-leader is the sole writer.
+	forwardEndpoint := config.String("INGEST_LEADER_URL", "http://ingestion-leader:8080/v1/publish/cid-event")
+	forwardTimeout := time.Duration(config.Float64("INGEST_FORWARD_TIMEOUT_SECONDS", 5)) * time.Second
+	publisher := ingestforward.New(forwardEndpoint, forwardTimeout)
 
 	bridge := wiring.MQTTBridge{Publisher: publisher, Gate: kernel}
 	mux := http.NewServeMux()
@@ -67,13 +63,15 @@ func main() {
 		}
 		event, err := bridge.Forward(wiring.MQTTMessage{Topic: req.Topic, Payload: []byte(req.Payload), Source: req.Source})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			log.Printf("mqtt forward failed: %v", err)
+			http.Error(w, "forward failed", http.StatusConflict)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(event)
 	})
 
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("mqtt-bridge listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }

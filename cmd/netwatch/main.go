@@ -62,7 +62,8 @@ func main() {
 		}
 		result, err := controller.Execute(r.Context(), req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			log.Printf("netwatch action failed: %v", err)
+			http.Error(w, "action failed", http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -81,13 +82,15 @@ func main() {
 		}
 		result, err := controller.S2Baseline(r.Context(), req, "manual")
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("netwatch s2 baseline failed: %v", err)
+			http.Error(w, "s2 baseline failed", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(result)
 	})
 
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("netwatch listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }

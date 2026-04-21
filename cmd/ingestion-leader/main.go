@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/John-Halo117/ARK/arkfield/internal/ingestion"
 	"github.com/John-Halo117/ARK/arkfield/internal/projections"
 	"github.com/John-Halo117/ARK/arkfield/internal/stability"
+	"github.com/John-Halo117/ARK/arkfield/internal/subjects"
 	"github.com/John-Halo117/ARK/arkfield/internal/transport"
 )
 
@@ -53,7 +55,7 @@ func main() {
 		log.Fatalf("kernel config invalid: %v", err)
 	}
 
-	publisher := natspub.Publisher{Client: natsClient, Subject: "ark.events.cid", StreamName: "ARK_EVENTS"}
+	publisher := natspub.Publisher{Client: natsClient, Subject: subjects.EventsCID, StreamName: subjects.EventsStream}
 	if err := publisher.EnsureStream(); err != nil {
 		log.Fatalf("jetstream ensure stream failed: %v", err)
 	}
@@ -92,12 +94,14 @@ func main() {
 		}
 		evt, deduped, err := svc.IngestGitCommit(r.Context(), req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			log.Printf("ingest git-commit failed: %v", err)
+			http.Error(w, "ingest failed", http.StatusConflict)
 			return
 		}
 		if !deduped {
 			if err := projector.Project(*evt); err != nil {
-				http.Error(w, "projection failed: "+err.Error(), http.StatusInternalServerError)
+				log.Printf("projection failed: %v", err)
+				http.Error(w, "projection failed", http.StatusInternalServerError)
 				return
 			}
 		}
@@ -113,6 +117,38 @@ func main() {
 		}{Deduped: deduped, Event: evt})
 	})
 
+	// Single-writer forwarding endpoint: accepts pre-computed CID event
+	// payloads from trusted upstream bridges (e.g. mqtt-bridge) and performs
+	// the only write to the NATS events subject. Keeps the ingestion-leader
+	// as the sole publisher to preserve ordering and dedupe guarantees.
+	mux.HandleFunc("/v1/publish/cid-event", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		defer func() { _ = r.Body.Close() }()
+		payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		if err != nil {
+			log.Printf("cid-event read failed: %v", err)
+			http.Error(w, "invalid payload", http.StatusBadRequest)
+			return
+		}
+		if len(payload) == 0 {
+			http.Error(w, "empty payload", http.StatusBadRequest)
+			return
+		}
+		if !json.Valid(payload) {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		if err := publisher.Publish(payload); err != nil {
+			log.Printf("cid-event publish failed: %v", err)
+			http.Error(w, "publish failed", http.StatusBadGateway)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+
 	mux.HandleFunc("/v1/replay", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -120,7 +156,8 @@ func main() {
 		}
 		from, to, err := projections.ReplayRangeFromQuery(r.URL.Query().Get("from"), r.URL.Query().Get("to"))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			log.Printf("replay parse failed: %v", err)
+			http.Error(w, "invalid replay range", http.StatusBadRequest)
 			return
 		}
 		if to-from > 10000 {
@@ -129,7 +166,8 @@ func main() {
 		}
 		events, err := projector.Replay(from, to)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("replay failed: %v", err)
+			http.Error(w, "replay failed", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

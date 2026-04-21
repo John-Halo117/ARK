@@ -80,6 +80,15 @@ SYSTEM_ASHI = "ark.system.ashi"
 # ---------------------------------------------------------------------------
 SPAWN_CONFIRMED = "ark.spawn.confirmed"
 
+# ---------------------------------------------------------------------------
+# Ingestion / CID event backbone
+# ---------------------------------------------------------------------------
+# Canonical CID events produced by the single-writer ingestion leader.
+EVENTS_CID = "ark.events.cid"
+
+# JetStream name that persists EVENTS_CID messages.
+EVENTS_STREAM = "ARK_EVENTS"
+
 
 def parse_capability_from_subject(subject: str) -> str:
     """Extract the dotted capability name from a ``ark.call.<svc>.<cap>`` subject.

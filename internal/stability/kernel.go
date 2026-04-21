@@ -160,7 +160,7 @@ func (k *Kernel) Evaluate(o Observation) Decision {
 	return Decision{
 		NextX:       nextX,
 		Metrics:     metrics,
-		Freeze:      guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction,
+		Freeze:      guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction || entropyValue > k.cfg.EntropyGuard,
 		Reason:      reason,
 		S2Activated: s2,
 	}
