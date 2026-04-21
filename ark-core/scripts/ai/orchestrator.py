@@ -11,6 +11,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from ark.security import validate_docker_arg
+
 
 @dataclass(frozen=True)
 class Task:
@@ -47,6 +49,12 @@ def load_tasks(path: Path) -> list[Task]:
     return tasks
 
 
+def validated_command(command: list[str]) -> list[str]:
+    """Validate every subprocess argument per repository policy."""
+
+    return [validate_docker_arg(arg) for arg in command]
+
+
 def classify(task: Task, repo_root: Path) -> subprocess.CompletedProcess[str]:
     script = repo_root / "scripts" / "ci" / "enforce_tiers.py"
     payload = [{"id": task.identifier, "scope": task.scope, "todo": task.todo}]
@@ -62,14 +70,16 @@ def classify(task: Task, repo_root: Path) -> subprocess.CompletedProcess[str]:
 
     try:
         return subprocess.run(
-            [
-                sys.executable,
-                str(script),
-                "--rules",
-                str(repo_root / "config" / "tiering_rules.json"),
-                "--batch",
-                str(batch),
-            ],
+            validated_command(
+                [
+                    sys.executable,
+                    str(script),
+                    "--rules",
+                    str(repo_root / "config" / "tiering_rules.json"),
+                    "--batch",
+                    str(batch),
+                ]
+            ),
             cwd=repo_root,
             check=False,
             capture_output=True,
@@ -81,7 +91,7 @@ def classify(task: Task, repo_root: Path) -> subprocess.CompletedProcess[str]:
 
 def run_gate(command: list[str], repo_root: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        command,
+        validated_command(command),
         cwd=repo_root,
         check=False,
         capture_output=True,
