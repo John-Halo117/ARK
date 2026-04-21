@@ -14,6 +14,13 @@ type ConflictGroup struct {
 
 // NeedsReview reports whether the conflict carries enough pressure to slow
 // promotion or require higher confidence before projection.
+//
+// A zero-value ConflictGroup (no claims, no scores) is considered benign and
+// does not need review. Once any signal is populated, the check activates.
 func (c ConflictGroup) NeedsReview() bool {
+	hasSignals := c.VarianceScore != 0 || c.SourceDiversity != 0 || c.AgreementRatio != 0
+	if !hasSignals {
+		return false
+	}
 	return c.VarianceScore > 0 || c.SourceDiversity > 0 || c.AgreementRatio < 1
 }

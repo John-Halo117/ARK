@@ -1,0 +1,65 @@
+name: ARK Core CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "ark-core/**"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "ark-core/**"
+
+defaults:
+  run:
+    working-directory: ark-core
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ark-core/go.mod
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ark-core/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Ruff format (check)
+        run: ruff format --check .
+
+      - name: Pytest
+        run: pytest --cov --cov-report=xml --cov-report=term-missing
+
+      - name: Validate canonical docs
+        run: |
+          test -f docs/ARK_TRUTH_SPINE.md
+          test -f docs/CODEX_ARK_SYSTEM_PROMPT.md
+          test -f docs/SYSTEM_MAP.md
+          test -f docs/TODO_TIERS.md
+          test -f docs/REDTEAM.md
+
+      - name: Validate tier rules
+        run: python scripts/ci/enforce_tiers.py --rules config/tiering_rules.json --validate-rules-only
+
+      - name: Red Team gate
+        run: bash scripts/ci/redteam.sh
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Docker Compose config
+        run: |
+          docker compose -f compose.yaml config
+          docker compose -f docker-compose.yml config
