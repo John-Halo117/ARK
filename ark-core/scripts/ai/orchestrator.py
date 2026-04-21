@@ -110,7 +110,9 @@ def process_task(task: Task, repo_root: Path, dry_run: bool) -> TaskResult:
     tier_check = classify(task, repo_root)
 
     if tier_check.returncode != 0:
-        return TaskResult(task.identifier, "manual_review", tier_check.stderr or tier_check.stdout)
+        return TaskResult(
+            task.identifier, "manual_review", tier_check.stderr or tier_check.stdout
+        )
 
     if dry_run:
         return TaskResult(
@@ -121,18 +123,24 @@ def process_task(task: Task, repo_root: Path, dry_run: bool) -> TaskResult:
 
     test_result = run_gate(["go", "test", "./..."], repo_root)
     if test_result.returncode != 0:
-        return TaskResult(task.identifier, "repair", test_result.stderr or test_result.stdout)
+        return TaskResult(
+            task.identifier, "repair", test_result.stderr or test_result.stdout
+        )
 
     redteam_result = run_gate(["bash", "scripts/ci/redteam.sh"], repo_root)
     if redteam_result.returncode != 0:
-        return TaskResult(task.identifier, "repair", redteam_result.stderr or redteam_result.stdout)
+        return TaskResult(
+            task.identifier, "repair", redteam_result.stderr or redteam_result.stdout
+        )
 
     return TaskResult(task.identifier, "promote", "tests and redteam gate passed")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tasks", type=Path, required=True, help="JSON file describing work items")
+    parser.add_argument(
+        "--tasks", type=Path, required=True, help="JSON file describing work items"
+    )
     parser.add_argument(
         "--repo-root",
         type=Path,
@@ -150,7 +158,9 @@ def main() -> int:
     results = [process_task(task, args.repo_root, args.dry_run) for task in tasks]
     print(json.dumps([result.__dict__ for result in results], indent=2))
 
-    return 0 if all(result.status in {"dry_run", "promote"} for result in results) else 1
+    return (
+        0 if all(result.status in {"dry_run", "promote"} for result in results) else 1
+    )
 
 
 if __name__ == "__main__":

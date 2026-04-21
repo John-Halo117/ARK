@@ -111,7 +111,9 @@ def evaluate_batch(
             }
         )
         if item.scope in rules.blocked_auto_promote_scopes:
-            violations.append(f"{item.identifier}: scope {item.scope} cannot auto-promote")
+            violations.append(
+                f"{item.identifier}: scope {item.scope} cannot auto-promote"
+            )
         if priority >= rules.manual_review_from:
             violations.append(
                 f"{item.identifier}: {priority_label(priority)} requires manual approval"

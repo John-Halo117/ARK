@@ -28,7 +28,9 @@ def test_tiering_rules_validate(project_root: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_tier_enforcement_blocks_mixed_batches(project_root: Path, tmp_path: Path) -> None:
+def test_tier_enforcement_blocks_mixed_batches(
+    project_root: Path, tmp_path: Path
+) -> None:
     batch_file = tmp_path / "batch.json"
     batch_file.write_text(
         json.dumps(
