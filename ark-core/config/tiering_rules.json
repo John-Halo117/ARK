@@ -1,0 +1,23 @@
+{
+  "scope_tiers": {
+    "S1": 1,
+    "S2": 2,
+    "S3": 3,
+    "S4": 4,
+    "S5": 5
+  },
+  "todo_tiers": {
+    "T1": 1,
+    "T2": 2,
+    "T3": 3,
+    "T4": 4,
+    "T5": 5
+  },
+  "manual_review_from": 4,
+  "blocked_auto_promote_scopes": [
+    "S4",
+    "S5"
+  ],
+  "forbid_mixed_todo_batches": true,
+  "reject_mixed_scope_escalation": true
+}
