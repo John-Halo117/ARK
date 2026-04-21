@@ -413,7 +413,6 @@ From [`ark-core/`](ark-core/README.md):
 ```powershell
 .\scripts\verify.ps1
 go test ./...
-docker compose -f compose.yaml config
 docker compose -f docker-compose.yml config
 ```
 

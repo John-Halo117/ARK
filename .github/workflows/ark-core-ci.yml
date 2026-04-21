@@ -61,5 +61,4 @@ jobs:
 
       - name: Docker Compose config
         run: |
-          docker compose -f compose.yaml config
-          docker compose -f docker-compose.yml config
+          docker compose -f ../docker-compose.yml config

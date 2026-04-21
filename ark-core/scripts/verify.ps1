@@ -17,7 +17,6 @@ if (Get-Command go -ErrorAction SilentlyContinue) {
     go test ./...
 }
 if (Get-Command docker -ErrorAction SilentlyContinue) {
-    docker compose -f compose.yaml config | Out-Null
-    docker compose -f docker-compose.yml config | Out-Null
+    docker compose -f ..\docker-compose.yml config | Out-Null
     Write-Host "docker compose config: OK"
 }

@@ -22,8 +22,7 @@ in multiple places:
 
 | Area | Role |
 | --- | --- |
-| `compose.yaml` | Legacy merged platform/event backbone Compose |
-| `docker-compose.yml` | ARK-Field v4.2 Stage 1 stack |
+| `../docker-compose.yml` | Root-level ARK stack used for compose validation |
 | `cmd/` | Go service entrypoints for Ingestion Leader, Stability Kernel, and NetWatch |
 | `internal/models/` | Shared event, stability, and ingest-to-truth model types |
 | `internal/epistemic/` | Claim states, conflict groups, resolver, and policy types |
@@ -39,8 +38,7 @@ From this directory:
 ```powershell
 .\scripts\verify.ps1
 go test ./...
-docker compose -f compose.yaml config
-docker compose -f docker-compose.yml config
+docker compose -f ..\docker-compose.yml config
 ```
 
 ## Workspace note

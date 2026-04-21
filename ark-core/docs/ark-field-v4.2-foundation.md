@@ -1,7 +1,7 @@
 # ARK-Field v4.2 Stage 1 Foundation
 
 This scaffold introduces the minimum repo shape needed for the ARK-Field v4.2
-pipeline while preserving the legacy `compose.yaml` stack.
+pipeline while preserving the existing root-level deployment stack.
 
 The Stage 1 scaffold now sits under a canonical doc set:
 
@@ -54,17 +54,14 @@ ark-core/
 |   `-- ci/
 |       |-- enforce_tiers.py
 |       `-- redteam.sh
-|-- docker-compose.yml
 |-- go.mod
-`-- compose.yaml
+`-- tests/
 ```
 
 ## Stage 1 Notes
 
-- `docker-compose.yml` is the new ARK-Field v4.2 stack for the Git-first event
-  backbone: NATS JetStream, Redis, Ingestion Leader, Stability Kernel,
-  WireGuard, and NetWatch.
-- `compose.yaml` is left untouched as the legacy merged platform stack.
+- The existing root-level [`../docker-compose.yml`](../../docker-compose.yml)
+  remains the compose stack validated by CI and the local verify script.
 - All new services mount the NAS at `/mnt/nas`, with the CAS root reserved at
   `/mnt/nas/cas`.
 - `.githooks/post-commit` is a stub hand-off from Git commits into the

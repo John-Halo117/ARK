@@ -62,6 +62,12 @@ def validated_command(command: list[str]) -> list[str]:
     return [validate_docker_arg(arg) for arg in command]
 
 
+def safe_cli_path(path: Path) -> str:
+    """Render filesystem paths in a validation-friendly CLI format."""
+
+    return path.resolve().as_posix()
+
+
 def classify(task: Task, repo_root: Path) -> subprocess.CompletedProcess[str]:
     script = repo_root / "scripts" / "ci" / "enforce_tiers.py"
     payload = [{"id": task.identifier, "scope": task.scope, "todo": task.todo}]
@@ -79,12 +85,12 @@ def classify(task: Task, repo_root: Path) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             validated_command(
                 [
-                    sys.executable,
-                    str(script),
+                    Path(sys.executable).resolve().as_posix(),
+                    safe_cli_path(script),
                     "--rules",
-                    str(repo_root / "config" / "tiering_rules.json"),
+                    safe_cli_path(repo_root / "config" / "tiering_rules.json"),
                     "--batch",
-                    str(batch),
+                    safe_cli_path(batch),
                 ]
             ),
             cwd=repo_root,
