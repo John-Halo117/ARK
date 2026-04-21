@@ -2,6 +2,27 @@
 
 **A production-grade, Gordon-deployed, NATS-first intelligent operating system.**
 
+This workspace now also carries a canonical truth-spine and governance scaffold
+under [`ark-core`](ark-core/README.md). That area holds the ingest-to-truth
+architecture docs, shared model types, epistemic resolution primitives, and
+CI/AI enforcement scripts without replacing the existing runtime-oriented main
+repo layout.
+
+## Canonical docs
+
+The architecture is intentionally split so each concept has one owner:
+
+| File | Owns |
+| --- | --- |
+| [`ARK_SPEC.md`](ARK_SPEC.md) | Main system architecture specification |
+| [`TRISCA.md`](TRISCA.md) | Distribution-aware scoring and control |
+| [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Root system topology |
+| [`ark-core/docs/ARK_TRUTH_SPINE.md`](ark-core/docs/ARK_TRUTH_SPINE.md) | Universal ingest-to-truth architecture |
+| [`ark-core/docs/CODEX_ARK_SYSTEM_PROMPT.md`](ark-core/docs/CODEX_ARK_SYSTEM_PROMPT.md) | Agent/runtime behavior contract |
+| [`ark-core/docs/TODO_TIERS.md`](ark-core/docs/TODO_TIERS.md) | S/T/P governance rules |
+| [`ark-core/docs/REDTEAM.md`](ark-core/docs/REDTEAM.md) | Red Team gates and scenarios |
+| [`ark-core/docs/ark-field-v4.2-foundation.md`](ark-core/docs/ark-field-v4.2-foundation.md) | Field stage bridge into the truth spine |
+
 ---
 
 ## 🎯 What is ARK?
@@ -373,3 +394,31 @@ docker-compose up -d my-agent
 **ARK is ready. Events flow. Services scale. Intelligence emerges.**
 
 Built with Gordon for production deployment.
+
+## Truth Spine Additions
+
+| Area | Role |
+| --- | --- |
+| [`ark-core/`](ark-core/README.md) | Canonical integration target for control plane + truth spine |
+| [`ark-core/internal/models/`](ark-core/internal/models/) | Shared event, stability, and ingest-to-truth model types |
+| [`ark-core/internal/epistemic/`](ark-core/internal/epistemic/) | Claim states, conflict groups, resolver, and policy types |
+| [`ark-core/scripts/ai/`](ark-core/scripts/ai/) | Agent prompt + offline orchestration scaffold |
+| [`ark-core/scripts/ci/`](ark-core/scripts/ci/) | Tier enforcement + Red Team gates |
+| [`ark-core/config/tiering_rules.json`](ark-core/config/tiering_rules.json) | Canonical S/T/P policy configuration |
+
+## Verify
+
+From [`ark-core/`](ark-core/README.md):
+
+```powershell
+.\scripts\verify.ps1
+go test ./...
+docker compose -f compose.yaml config
+docker compose -f docker-compose.yml config
+```
+
+## Merge Rule
+
+This workspace now prefers cross-links over repeated prose. If a concept already
+has a canonical file, add a reference to that file instead of creating a second
+version of the same explanation.
