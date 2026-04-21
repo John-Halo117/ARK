@@ -11,7 +11,14 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from ark.security import validate_docker_arg
+# The shared security helpers live at the ARK repository root. Put it on
+# sys.path so this script keeps working when invoked from inside the
+# ark-core subtree (e.g. via pytest with cwd=ark-core).
+_ARK_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_ARK_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ARK_REPO_ROOT))
+
+from ark.security import validate_docker_arg  # noqa: E402
 
 
 @dataclass(frozen=True)
