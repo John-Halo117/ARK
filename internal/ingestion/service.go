@@ -153,6 +153,7 @@ func (s *Service) IngestGitCommit(ctx context.Context, req IngestRequest) (*mode
 		return nil, false, fmt.Errorf("publish event: %w", err)
 	}
 	if err := s.Store.Commit(stateHash, DedupeRecord{CID: cid, Sequence: seq}); err != nil {
+		_ = s.Store.Release(stateHash)
 		return nil, false, fmt.Errorf("dedupe commit: %w", err)
 	}
 	return &event, false, nil
