@@ -13,6 +13,7 @@ fi
 
 if command -v curl >/dev/null 2>&1; then
   curl --fail --silent --show-error \
+    --max-time 5 --connect-timeout 3 \
     -H 'Content-Type: application/json' \
     -X POST \
     -d "$payload" \
