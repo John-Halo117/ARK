@@ -1,6 +1,11 @@
 use crate::types::LKS;
+use super::system::{orthogonalize, preprocess, trisca, State, SystemConfig};
 
 pub fn compute(data: &[f32]) -> LKS {
+    compute_v41(data)
+}
+
+pub fn compute_legacy(data: &[f32]) -> LKS {
     if data.is_empty() {
         return LKS { qts:0.0,dsi:0.0,dss:0.0,dss_kalman:0.0,phase:"invalid".into() };
     }
@@ -57,5 +62,72 @@ pub fn compute(data: &[f32]) -> LKS {
         dss,
         dss_kalman: dss*0.92,
         phase: phase.into(),
+    }
+}
+
+pub fn compute_v41(data: &[f32]) -> LKS {
+    let config = SystemConfig::default();
+    let samples: Vec<f64> = data.iter().map(|value| f64::from(*value)).collect();
+
+    let cleaned = match preprocess(&samples, &config) {
+        Ok(values) => values,
+        Err(_) => return invalid_lks(),
+    };
+    let orthogonalized = match orthogonalize(&cleaned, &config) {
+        Ok(values) => values,
+        Err(_) => return invalid_lks(),
+    };
+    let processed = match trisca(&orthogonalized, 0, None, &config) {
+        Ok(result) => result,
+        Err(_) => return invalid_lks(),
+    };
+
+    state_to_lks(&processed.state, processed.rejected)
+}
+
+fn invalid_lks() -> LKS {
+    LKS {
+        qts: 0.0,
+        dsi: 0.0,
+        dss: 0.0,
+        dss_kalman: 0.0,
+        phase: "invalid".into(),
+    }
+}
+
+fn state_to_lks(state: &State, rejected: bool) -> LKS {
+    let phase = if rejected {
+        "fragile"
+    } else if state.c < 0.45 {
+        "unstable"
+    } else if state.v < 0.25 {
+        "drift"
+    } else {
+        "stable"
+    };
+
+    LKS {
+        qts: state.v as f32,
+        dsi: state.e as f32,
+        dss: state.c as f32,
+        dss_kalman: state.c as f32,
+        phase: phase.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compute, compute_v41};
+
+    #[test]
+    fn compute_defaults_to_v41() {
+        let data = [0.1_f32, 0.5_f32, 0.9_f32];
+        let default_output = compute(&data);
+        let v41_output = compute_v41(&data);
+        assert_eq!(default_output.qts, v41_output.qts);
+        assert_eq!(default_output.dsi, v41_output.dsi);
+        assert_eq!(default_output.dss, v41_output.dss);
+        assert_eq!(default_output.dss_kalman, v41_output.dss_kalman);
+        assert_eq!(default_output.phase, v41_output.phase);
     }
 }
