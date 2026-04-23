@@ -7,6 +7,7 @@ Manages dynamic service registration, health, and routing decisions
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 try:
@@ -26,7 +27,11 @@ from ark.maintenance import (
     ShutdownCoordinator,
 )
 from ark.event_schema import EventSource
-from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.policy_engine import load_policy_set
+from ark.reducers import MeshViewReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import RuntimeAudit
 from ark.subjects import MESH_REGISTER, MESH_HEARTBEAT, MESH_REGISTERED
 from ark.time_utils import utc_now_iso, utc_now_naive
 
@@ -80,16 +85,26 @@ class MeshRegistry:
         self.nc = None
         self.js = None
         self.gsb = gsb or build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.ARK_CORE.value,
+            surface="mesh",
+            default_tags={"surface": "mesh"},
+        )
+        self.contracts = runtime_contract_registry()
+        self.route_policy = load_policy_set(Path(__file__).resolve().parents[1] / "policy" / "mesh_routing_rules.json")
         self.shutdown = ShutdownCoordinator()
         self.health = HealthCheck("ark-mesh-registry")
         self.health.register("nats", lambda: self._nats.is_connected)
         self.health.register("gsb", lambda: self.gsb.health()["enabled"])
+        self.reducer_engine = ReducerEngine((MeshViewReducer(),))
+        self.health.register("reducers", lambda: self.reducer_engine.health()["healthy"])
         
         # Registry: service -> instance_id -> ServiceInstance
-        self.registry: Dict[str, Dict[str, ServiceInstance]] = {}
+        self.registry: Dict[str, Dict[str, ServiceInstance]] = self.reducer_engine.view("mesh.runtime")["registry"]
         
         # Capability index: capability -> [instance_ids]
-        self.capability_index: Dict[str, List[str]] = {}
+        self.capability_index: Dict[str, List[str]] = self.reducer_engine.view("mesh.runtime")["capability_index"]
         
         # Active subscriptions
         self.subscriptions = {}
@@ -110,7 +125,10 @@ class MeshRegistry:
             
             async for msg in sub.messages:
                 try:
-                    event = json.loads(msg.data.decode())
+                    event = self.contracts.materialize_payload(
+                        "runtime.mesh.registration",
+                        json.loads(msg.data.decode()),
+                    )
                     await self.handle_registration(event)
                 except Exception as e:
                     logger.error(f"Error processing registration: {e}")
@@ -151,23 +169,19 @@ class MeshRegistry:
             return
 
         ttl = max(5, min(int(ttl), 300))  # clamp 5-300s
-        if not self._publish_gsb("mesh.registration", "mesh.registration", {"service": service, "capabilities": safe_caps}):
+        if self.audit.record("registration", "mesh.registration", {"service": service, "capabilities": safe_caps}):
             return
-        
-        # Store instance
-        if service not in self.registry:
-            self.registry[service] = {}
-        
-        self.registry[service][instance_id] = ServiceInstance(
-            service, instance_id, safe_caps, metadata, ttl
+        instance = ServiceInstance(
+            service,
+            instance_id,
+            safe_caps,
+            metadata,
+            ttl,
         )
-        
-        # Update capability index
-        for capability in safe_caps:
-            if capability not in self.capability_index:
-                self.capability_index[capability] = []
-            if instance_id not in self.capability_index[capability]:
-                self.capability_index[capability].append(instance_id)
+        self.reducer_engine.apply(
+            "mesh.registration",
+            {"service": service, "instance_id": instance_id, "instance": instance},
+        )
         
         logger.info("Registered %s/%s: %s", service, instance_id, safe_caps)
         
@@ -187,16 +201,25 @@ class MeshRegistry:
             
             async for msg in sub.messages:
                 try:
-                    event = json.loads(msg.data.decode())
+                    event = self.contracts.materialize_payload(
+                        "runtime.mesh.heartbeat",
+                        json.loads(msg.data.decode()),
+                    )
                     service = event.get('service')
                     instance_id = event.get('instance_id')
                     load = event.get('load', 0.0)
                     
                     if service in self.registry and instance_id in self.registry[service]:
-                        inst = self.registry[service][instance_id]
-                        inst.last_heartbeat = utc_now_naive()
-                        inst.load = load
-                        inst.healthy = event.get('healthy', True)
+                        self.reducer_engine.apply(
+                            "mesh.heartbeat",
+                            {
+                                "service": service,
+                                "instance_id": instance_id,
+                                "last_heartbeat": utc_now_naive(),
+                                "load": load,
+                                "healthy": event.get('healthy', True),
+                            },
+                        )
                         logger.debug(f"Heartbeat: {service}/{instance_id} load={load}")
                 
                 except Exception as e:
@@ -215,21 +238,15 @@ class MeshRegistry:
                 for instance_id, inst in list(instances.items()):
                     if inst.is_expired():
                         expired.append((service, instance_id))
-                        del instances[instance_id]
+                        self.reducer_engine.apply(
+                            "mesh.instance.expired",
+                            {"service": service, "instance_id": instance_id},
+                        )
                         logger.info(f"Removed expired: {service}/{instance_id}")
-            
-            # Clean capability index — keep only instance IDs that still exist
-            for capability in list(self.capability_index.keys()):
-                self.capability_index[capability] = [
-                    iid for iid in self.capability_index[capability]
-                    if any(iid in insts for insts in self.registry.values())
-                ]
-                if not self.capability_index[capability]:
-                    del self.capability_index[capability]
     
     async def route_capability(self, capability: str, load_aware: bool = True) -> Optional[tuple]:
         """Route a capability request to best instance"""
-        if not self._publish_gsb("mesh.route", capability, {"load_aware": load_aware}):
+        if self.audit.record("route", capability, {"load_aware": load_aware}):
             return None
         if capability not in self.capability_index:
             return None
@@ -238,24 +255,32 @@ class MeshRegistry:
         if not candidates:
             return None
         
-        # Find service and instance
+        decision = self.route_policy.evaluate({"load_aware": load_aware})
         best_instance = None
         best_load = float('inf')
         best_service = None
-        
+
         for service, instances in self.registry.items():
             for instance_id in candidates:
                 if instance_id in instances:
                     inst = instances[instance_id]
-                    if inst.healthy and load_aware:
+                    if not inst.healthy:
+                        continue
+                    if decision.decision == "lowest_load":
                         if inst.load < best_load:
                             best_load = inst.load
                             best_instance = instance_id
                             best_service = service
-                    elif inst.healthy:
+                    else:
                         return (service, instance_id)
-        
-        return (best_service, best_instance) if best_instance else None
+
+        route = (best_service, best_instance) if best_instance else None
+        self.audit.record(
+            "route.decision",
+            capability,
+            {"strategy": decision.decision, "matched_rule": decision.rule_name, "routed": bool(route)},
+        )
+        return route
     
     async def get_service_info(self, service: str) -> Dict[str, Any]:
         """Get service inventory"""
@@ -297,25 +322,10 @@ class MeshRegistry:
             "service_details": services
         }
 
-    def _publish_gsb(self, action: str, capability: str, payload: Dict[str, Any]) -> bool:
-        result = self.gsb.publish(
-            GSBRecord(
-                action=action,
-                capability=capability,
-                payload=payload,
-                source=EventSource.ARK_CORE.value,
-                tags={"surface": "mesh"},
-            )
-        )
-        if result.status == "error":
-            logger.warning("GSB rejected mesh feed: %s", result.as_dict())
-            return False
-        return True
-
     async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
-        if not self._publish_gsb("mesh.publish", capability, {"subject": subject, "keys": sorted(payload)[:16]}):
+        error = await self.audit.publish_json(target, subject, payload, capability)
+        if error:
             return
-        await target.publish(subject, json.dumps(payload).encode())
     
     async def expose_api(self, host: str = "0.0.0.0", port: int = 7000):
         """Expose REST API for mesh queries with security middleware"""

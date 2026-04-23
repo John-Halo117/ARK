@@ -17,7 +17,10 @@ from ark.emitter_contracts import (
     build_homeassistant_temperature_metric_plan,
 )
 from ark.event_schema import EventSource
-from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.reducers import KeyedItemsReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit
 from ark.security import validate_entity_id
 try:
     import nats
@@ -65,8 +68,34 @@ class HomeAssistantEmitter:
         self.js = None
         self.session = None
         self.event_count = 0
-        self.tracked_entities: Dict[str, Any] = {}
         self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.EMITTER_HA.value,
+            surface="emitter",
+            default_tags={"emitter": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
+        self.reducer_engine = ReducerEngine(
+            (
+                KeyedItemsReducer(
+                    name="emitter.homeassistant.entities",
+                    key_field="entity_id",
+                    upsert_event="homeassistant.entity_observed",
+                ),
+            )
+        )
+        self.tracked_entities: Dict[str, Any] = self.reducer_engine.view("emitter.homeassistant.entities")["items"]
+        self.dispatch = DispatchRegistry(
+            (
+                DispatchDescriptor("event.home_assistant", self.get_events),
+                DispatchDescriptor("state.device_update", self.update_device),
+                DispatchDescriptor("climate.temperature", self.get_temperature),
+                DispatchDescriptor("light.toggle", self.toggle_light),
+                DispatchDescriptor("sensor.reading", self.get_sensor),
+            ),
+            contracts=self.contracts,
+        )
         
         logger.info(f"HA Emitter initialized (instance={self.instance_id})")
     
@@ -172,11 +201,17 @@ class HomeAssistantEmitter:
                     
                     # Store current state
                     previous_states[entity_id] = state
-                    self.tracked_entities[entity_id] = {
-                        "state": current,
-                        "attributes": attributes,
-                            "last_change": utc_now_iso()
-                    }
+                    self.reducer_engine.apply(
+                        "homeassistant.entity_observed",
+                        {
+                            "entity_id": entity_id,
+                            "value": {
+                                "state": current,
+                                "attributes": attributes,
+                                "last_change": utc_now_iso(),
+                            },
+                        },
+                    )
                 
                 await asyncio.sleep(5)  # Poll every 5 seconds
             
@@ -230,7 +265,10 @@ class HomeAssistantEmitter:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     
-                    request = json.loads(msg.data.decode())
+                    request = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
                     params = request.get('params', {})
                     
@@ -250,18 +288,7 @@ class HomeAssistantEmitter:
     
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle capability requests"""
-        if capability == "event.home_assistant":
-            return await self.get_events(params)
-        elif capability == "state.device_update":
-            return await self.update_device(params)
-        elif capability == "climate.temperature":
-            return await self.get_temperature(params)
-        elif capability == "light.toggle":
-            return await self.toggle_light(params)
-        elif capability == "sensor.reading":
-            return await self.get_sensor(params)
-        else:
-            return {"error": f"Unknown capability: {capability}"}
+        return await self.audit.execute(self.dispatch, capability, params)
     
     async def get_events(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get recent Home Assistant events"""
@@ -391,21 +418,7 @@ class HomeAssistantEmitter:
         }
 
     async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
-        if not self._publish_gsb(capability, {"subject": subject, "keys": sorted(payload)[:16]}):
-            return
-        await target.publish(subject, json.dumps(payload).encode())
-
-    def _publish_gsb(self, capability: str, payload: Dict[str, Any]) -> bool:
-        result = self.gsb.publish(
-            GSBRecord(
-                action="emitter.publish",
-                capability=capability,
-                payload=payload,
-                source=EventSource.ARK_CORE.value,
-                tags={"emitter": self.service_name},
-            )
-        )
-        return result.status == "ok"
+        await self.audit.publish_json(target, subject, payload, capability)
     
     async def run(self):
         """Main emitter loop"""

@@ -18,7 +18,10 @@ from ark.emitter_contracts import (
     build_jellyfin_playback_stop_plan,
 )
 from ark.event_schema import EventSource
-from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.reducers import KeyedItemsReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit
 try:
     import nats
     from nats.errors import Error as NATSError
@@ -64,8 +67,35 @@ class JellyfinEmitter:
         self.js = None
         self.session = None
         self.event_count = 0
-        self.active_sessions: Dict[str, Any] = {}
         self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.EMITTER_JELLYFIN.value,
+            surface="emitter",
+            default_tags={"emitter": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
+        self.reducer_engine = ReducerEngine(
+            (
+                KeyedItemsReducer(
+                    name="emitter.jellyfin.sessions",
+                    key_field="session_id",
+                    upsert_event="jellyfin.session_observed",
+                    remove_event="jellyfin.session_removed",
+                ),
+            )
+        )
+        self.active_sessions: Dict[str, Any] = self.reducer_engine.view("emitter.jellyfin.sessions")["items"]
+        self.dispatch = DispatchRegistry(
+            (
+                DispatchDescriptor("media.playback", self.get_playback_status),
+                DispatchDescriptor("media.library", self.get_library),
+                DispatchDescriptor("media.search", self.search_media),
+                DispatchDescriptor("playback.status", self.get_playback_status),
+                DispatchDescriptor("library.items", self.get_library_items),
+            ),
+            contracts=self.contracts,
+        )
         
         logger.info(f"Jellyfin Emitter initialized (instance={self.instance_id})")
     
@@ -176,19 +206,28 @@ class JellyfinEmitter:
                             )
                         
                         # Update tracked session
-                        self.active_sessions[session_id] = {
-                            "device_name": device_name,
-                            "item_id": item_id,
-                            "title": title,
-                            "media_type": media_type,
-                            "last_update": utc_now_iso()
-                        }
+                        self.reducer_engine.apply(
+                            "jellyfin.session_observed",
+                            {
+                                "session_id": session_id,
+                                "value": {
+                                    "device_name": device_name,
+                                    "item_id": item_id,
+                                    "title": title,
+                                    "media_type": media_type,
+                                    "last_update": utc_now_iso(),
+                                },
+                            },
+                        )
                     else:
                         # No active playback
                         if session_id in self.active_sessions:
                             # Playback stopped
                             await self.emit_playback_stop(session_id, device_name)
-                            del self.active_sessions[session_id]
+                            self.reducer_engine.apply(
+                                "jellyfin.session_removed",
+                                {"session_id": session_id},
+                            )
                 
                 await asyncio.sleep(10)  # Poll every 10 seconds
             
@@ -263,7 +302,10 @@ class JellyfinEmitter:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     
-                    request = json.loads(msg.data.decode())
+                    request = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
                     params = request.get('params', {})
                     
@@ -283,18 +325,7 @@ class JellyfinEmitter:
     
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle capability requests"""
-        if capability == "media.playback":
-            return await self.get_playback_status(params)
-        elif capability == "media.library":
-            return await self.get_library(params)
-        elif capability == "media.search":
-            return await self.search_media(params)
-        elif capability == "playback.status":
-            return await self.get_playback_status(params)
-        elif capability == "library.items":
-            return await self.get_library_items(params)
-        else:
-            return {"error": f"Unknown capability: {capability}"}
+        return await self.audit.execute(self.dispatch, capability, params)
     
     async def get_playback_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get current playback status"""
@@ -406,21 +437,7 @@ class JellyfinEmitter:
             return {"error": str(e)}
 
     async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
-        if not self._publish_gsb(capability, {"subject": subject, "keys": sorted(payload)[:16]}):
-            return
-        await target.publish(subject, json.dumps(payload).encode())
-
-    def _publish_gsb(self, capability: str, payload: Dict[str, Any]) -> bool:
-        result = self.gsb.publish(
-            GSBRecord(
-                action="emitter.publish",
-                capability=capability,
-                payload=payload,
-                source=EventSource.ARK_CORE.value,
-                tags={"emitter": self.service_name},
-            )
-        )
-        return result.status == "ok"
+        await self.audit.publish_json(target, subject, payload, capability)
     
     async def run(self):
         """Main emitter loop"""

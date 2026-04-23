@@ -1,0 +1,49 @@
+{
+  "version": "v1",
+  "default_decision": "generic_state_change",
+  "rules": [
+    {
+      "name": "climate_temperature_route",
+      "decision": "climate_temperature",
+      "conditions": [
+        {"field": "entity_prefix", "op": "eq", "value": "climate"}
+      ],
+      "output": {
+        "subject": "ark.event.climate.temperature",
+        "value_mode": "attribute",
+        "attribute_name": "current_temperature"
+      }
+    },
+    {
+      "name": "light_toggle_route",
+      "decision": "light_toggle",
+      "conditions": [
+        {"field": "entity_prefix", "op": "eq", "value": "light"}
+      ],
+      "output": {
+        "subject": "ark.event.light.toggle",
+        "value_mode": "new_state"
+      }
+    },
+    {
+      "name": "sensor_reading_route",
+      "decision": "sensor_reading",
+      "conditions": [
+        {"field": "entity_prefix", "op": "eq", "value": "sensor"}
+      ],
+      "output": {
+        "subject": "ark.event.sensor.reading",
+        "value_mode": "new_state"
+      }
+    },
+    {
+      "name": "generic_state_change_route",
+      "decision": "generic_state_change",
+      "conditions": [],
+      "output": {
+        "subject": "ark.event.state.change",
+        "value_mode": "new_state"
+      }
+    }
+  ]
+}

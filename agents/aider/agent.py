@@ -19,10 +19,12 @@ except ImportError:  # pragma: no cover - local import/test environments
 
 from ark.config import load_composio_config, load_service_runtime_config
 from ark.event_schema import EventSource
-from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
+from ark.gsb import GlobalStateBus, build_global_state_bus
 from ark.integrations import IntegrationRegistry, build_local_registry
 from ark.math_utils import zscore_anomaly
 from ark.maintenance import HealthCheck, ResilientNATSConnection, ShutdownCoordinator
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit, runtime_failure, summarize_result
 from ark.security import sanitize_string
 from ark.subjects import (
     MESH_HEARTBEAT,
@@ -86,6 +88,13 @@ class AiderAgent:
         self.nc = None
         self.js = None
         self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=self._gsb_source(),
+            surface="agent",
+            default_tags={"service": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
 
         self._nats = ResilientNATSConnection(self.nats_url)
         self.shutdown = ShutdownCoordinator()
@@ -106,6 +115,8 @@ class AiderAgent:
         else:
             self.composio_api_key = ""
             self.local_integrations = None
+
+        self.dispatch = DispatchRegistry(self._build_dispatch_descriptors(), contracts=self.contracts)
 
     async def connect(self):
         self.nc = await self._nats.connect()
@@ -154,7 +165,10 @@ class AiderAgent:
             async for msg in sub.messages:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
-                    payload = json.loads(msg.data.decode())
+                    payload = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = payload.get("request_id", str(uuid.uuid4())[:12])
                     params = payload.get("params", {})
                     result = await self.handle_capability(capability, params)
@@ -166,34 +180,7 @@ class AiderAgent:
             logger.error("Subscription error: %s", exc)
 
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        bus_result = self._publish_capability("agent.capability.request", capability, {"params": params})
-        if bus_result:
-            return bus_result
-        if self._is_local_integration(capability):
-            result = await self.local_integration(capability, params)
-            return self._with_result_record(capability, result)
-        handlers = {
-            "code.analyze": self.analyze_code,
-            "code.transform": self.transform_code,
-            "code.generate": self.generate_code,
-            "reasoning.plan": self.plan,
-            "reasoning.decompose": self.decompose,
-            "anomaly.detect": self.detect_anomaly,
-            "system.health": self.compute_health,
-            "metrics.ingest": self.ingest_metric,
-            "ashi.compute": self.compute_ashi,
-            "external.email": self.send_email,
-            "external.github": self.github_action,
-            "external.slack": self.slack_message,
-            "external.notion": self.notion_action,
-            "external.calendar": self.calendar_action,
-            "external.crm": self.crm_action,
-        }
-        handler = handlers.get(capability)
-        if handler is None:
-            return {"error": f"Unknown capability: {capability}"}
-        result = await handler(params)
-        return self._with_result_record(capability, result)
+        return await self.audit.execute(self.dispatch, capability, params)
 
     async def local_integration(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         if self.local_integrations is None:
@@ -389,8 +376,7 @@ class AiderAgent:
         }
 
     def _with_result_record(self, capability: str, result: Dict[str, Any]) -> Dict[str, Any]:
-        summary = {"status": result.get("status", "ok"), "keys": sorted(result)[:16]}
-        bus_result = self._publish_capability("agent.capability.result", capability, summary)
+        bus_result = self._publish_capability("agent.capability.result", capability, summarize_result(result))
         return bus_result or result
 
     def _publish_capability(
@@ -399,26 +385,12 @@ class AiderAgent:
         capability: str,
         payload: Dict[str, Any],
     ) -> Dict[str, Any] | None:
-        result = self.gsb.publish(
-            GSBRecord(
-                action=action,
-                capability=capability,
-                payload=payload,
-                source=self._gsb_source(),
-                tags={"service": self.service_name},
-            )
-        )
-        return result.as_dict() if result.status == "error" else None
+        return self.audit.record(action, capability, payload)
 
     async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
-        bus_result = self._publish_capability(
-            "agent.publish",
-            capability,
-            {"subject": subject, "keys": sorted(payload)[:16]},
-        )
+        bus_result = await self.audit.publish_json(target, subject, payload, capability)
         if bus_result:
             return
-        await target.publish(subject, json.dumps(payload).encode())
 
     def _gsb_source(self) -> str:
         sources = {
@@ -427,3 +399,34 @@ class AiderAgent:
             "composio": EventSource.AGENT_COMPOSIO.value,
         }
         return sources.get(self.service_name, EventSource.ARK_CORE.value)
+
+    def _build_dispatch_descriptors(self) -> tuple[DispatchDescriptor, ...]:
+        descriptors = [
+            DispatchDescriptor("code.analyze", self.analyze_code),
+            DispatchDescriptor("code.transform", self.transform_code),
+            DispatchDescriptor("code.generate", self.generate_code),
+            DispatchDescriptor("reasoning.plan", self.plan),
+            DispatchDescriptor("reasoning.decompose", self.decompose),
+            DispatchDescriptor("anomaly.detect", self.detect_anomaly),
+            DispatchDescriptor("system.health", self.compute_health),
+            DispatchDescriptor("metrics.ingest", self.ingest_metric),
+            DispatchDescriptor("ashi.compute", self.compute_ashi),
+            DispatchDescriptor("external.email", self.send_email),
+            DispatchDescriptor("external.github", self.github_action),
+            DispatchDescriptor("external.slack", self.slack_message),
+            DispatchDescriptor("external.notion", self.notion_action),
+            DispatchDescriptor("external.calendar", self.calendar_action),
+            DispatchDescriptor("external.crm", self.crm_action),
+        ]
+        if self.local_integrations is not None:
+            for capability in self.local_integrations.capabilities():
+                descriptors.append(DispatchDescriptor(capability, self._local_dispatch_for(capability)))
+        return tuple(descriptors)
+
+    def _local_dispatch_for(self, capability: str):
+        async def _dispatch(params: Dict[str, Any]) -> Dict[str, Any]:
+            if not isinstance(params, dict):
+                return runtime_failure("LOCAL_INTEGRATION_PARAMS_INVALID", "local integration params must be an object")
+            return await self.local_integration(capability, params)
+
+        return _dispatch

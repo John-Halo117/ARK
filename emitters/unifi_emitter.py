@@ -18,7 +18,10 @@ from ark.emitter_contracts import (
     build_unifi_network_metric_plan,
 )
 from ark.event_schema import EventSource
-from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.reducers import KeyedItemsReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit
 try:
     import nats
     from nats.errors import Error as NATSError
@@ -67,9 +70,36 @@ class UniFiEmitter:
         self.js = None
         self.session = None
         self.event_count = 0
-        self.tracked_devices: Dict[str, Any] = {}
         self.auth_cookie = None
         self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.EMITTER_UNIFI.value,
+            surface="emitter",
+            default_tags={"emitter": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
+        self.reducer_engine = ReducerEngine(
+            (
+                KeyedItemsReducer(
+                    name="emitter.unifi.devices",
+                    key_field="device_id",
+                    upsert_event="unifi.device_observed",
+                ),
+            )
+        )
+        self.tracked_devices: Dict[str, Any] = self.reducer_engine.view("emitter.unifi.devices")["items"]
+        self.dispatch = DispatchRegistry(
+            (
+                DispatchDescriptor("network.devices", self.get_devices),
+                DispatchDescriptor("network.events", self.get_events),
+                DispatchDescriptor("network.stats", self.get_stats),
+                DispatchDescriptor("device.status", self.get_device_status),
+                DispatchDescriptor("wireless.clients", self.get_wireless_clients),
+                DispatchDescriptor("network.health", self.get_network_health),
+            ),
+            contracts=self.contracts,
+        )
         
         logger.info(f"UniFi Emitter initialized (instance={self.instance_id})")
     
@@ -200,12 +230,18 @@ class UniFiEmitter:
                         await self.emit_device_online(device_id, device_name, ip_address)
                     
                     # Update tracked device
-                    self.tracked_devices[device_id] = {
-                        "name": device_name,
-                        "status": status,
-                        "ip": ip_address,
-                        "last_update": utc_now_iso()
-                    }
+                    self.reducer_engine.apply(
+                        "unifi.device_observed",
+                        {
+                            "device_id": device_id,
+                            "value": {
+                                "name": device_name,
+                                "status": status,
+                                "ip": ip_address,
+                                "last_update": utc_now_iso(),
+                            },
+                        },
+                    )
                 
                 # Emit client count metric
                 if clients:
@@ -331,7 +367,10 @@ class UniFiEmitter:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     
-                    request = json.loads(msg.data.decode())
+                    request = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
                     params = request.get('params', {})
                     
@@ -351,20 +390,7 @@ class UniFiEmitter:
     
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle capability requests"""
-        if capability == "network.devices":
-            return await self.get_devices(params)
-        elif capability == "network.events":
-            return await self.get_events(params)
-        elif capability == "network.stats":
-            return await self.get_stats(params)
-        elif capability == "device.status":
-            return await self.get_device_status(params)
-        elif capability == "wireless.clients":
-            return await self.get_wireless_clients(params)
-        elif capability == "network.health":
-            return await self.get_network_health(params)
-        else:
-            return {"error": f"Unknown capability: {capability}"}
+        return await self.audit.execute(self.dispatch, capability, params)
     
     async def get_devices(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get all network devices"""
@@ -450,21 +476,7 @@ class UniFiEmitter:
         }
 
     async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
-        if not self._publish_gsb(capability, {"subject": subject, "keys": sorted(payload)[:16]}):
-            return
-        await target.publish(subject, json.dumps(payload).encode())
-
-    def _publish_gsb(self, capability: str, payload: Dict[str, Any]) -> bool:
-        result = self.gsb.publish(
-            GSBRecord(
-                action="emitter.publish",
-                capability=capability,
-                payload=payload,
-                source=EventSource.ARK_CORE.value,
-                tags={"emitter": self.service_name},
-            )
-        )
-        return result.status == "ok"
+        await self.audit.publish_json(target, subject, payload, capability)
     
     async def run(self):
         """Main emitter loop"""

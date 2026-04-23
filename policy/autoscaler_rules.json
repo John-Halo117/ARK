@@ -1,0 +1,59 @@
+{
+  "version": "v1",
+  "default_decision": "hold",
+  "services": {
+    "opencode": {
+      "image": "ark-opencode:latest",
+      "cpu_limit": "1",
+      "memory_limit": "1G",
+      "min_instances": 1,
+      "max_instances": 5,
+      "queue_threshold": 10,
+      "latency_threshold": 1000
+    },
+    "openwolf": {
+      "image": "ark-openwolf:latest",
+      "cpu_limit": "0.5",
+      "memory_limit": "512M",
+      "min_instances": 1,
+      "max_instances": 3,
+      "queue_threshold": 20,
+      "latency_threshold": 500
+    },
+    "composio": {
+      "image": "ark-composio:latest",
+      "cpu_limit": "1",
+      "memory_limit": "1G",
+      "min_instances": 1,
+      "max_instances": 10,
+      "queue_threshold": 50,
+      "latency_threshold": 2000
+    }
+  },
+  "rules": [
+    {
+      "name": "scale_up_on_queue_depth",
+      "decision": "scale_up",
+      "conditions": [
+        {"field": "demand", "op": "gt", "ref": "queue_threshold"},
+        {"field": "instance_count", "op": "lt", "ref": "max_instances"}
+      ]
+    },
+    {
+      "name": "scale_up_on_latency",
+      "decision": "scale_up",
+      "conditions": [
+        {"field": "latency", "op": "gt", "ref": "latency_threshold"},
+        {"field": "instance_count", "op": "lt", "ref": "max_instances"}
+      ]
+    },
+    {
+      "name": "scale_down_when_idle",
+      "decision": "scale_down",
+      "conditions": [
+        {"field": "demand", "op": "eq", "value": 0},
+        {"field": "instance_count", "op": "gt", "ref": "min_instances"}
+      ]
+    }
+  ]
+}

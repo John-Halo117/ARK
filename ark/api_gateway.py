@@ -14,7 +14,7 @@ from aiohttp import web
 from ark.config import load_gateway_config
 from ark.duck_client import DuckClient
 from ark.event_schema import EventSource
-from ark.gsb import DuckGSBSink, GSBRecord, GlobalStateBus, build_global_state_bus
+from ark.gsb import DuckGSBSink, GlobalStateBus, build_global_state_bus
 from ark.security import (
     auth_middleware,
     clamp_limit,
@@ -32,6 +32,8 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import RuntimeAudit
 from ark.subjects import call_subject
 from ark.time_utils import utc_now_iso, utc_timestamp
 
@@ -54,6 +56,13 @@ class ARKGateway:
         self.js = None
         self.db = DuckClient()
         self.gsb: GlobalStateBus = build_global_state_bus(DuckGSBSink(self.db))
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.ARK_CORE.value,
+            surface="gateway",
+            default_tags={"surface": "gateway"},
+        )
+        self.contracts = runtime_contract_registry()
         self.shutdown = ShutdownCoordinator()
         self.health = HealthCheck("ark-gateway")
         self.health.register("nats", lambda: self._nats.is_connected)
@@ -316,18 +325,14 @@ class ARKGateway:
         capability: str,
         payload: dict[str, object],
     ) -> web.Response | None:
-        result = self.gsb.publish(
-            GSBRecord(
-                action=action,
-                capability=capability,
-                payload={**self._request_payload(request), **payload},
-                source=EventSource.ARK_CORE.value,
-                tags={"surface": "gateway"},
-            )
+        error = self.audit.record(
+            action,
+            capability,
+            {**self._request_payload(request), **payload},
         )
-        if result.status == "ok":
+        if error is None:
             return None
-        return web.json_response(result.as_dict(), status=500)
+        return web.json_response(error, status=500)
 
     def _request_payload(self, request: web.Request) -> dict[str, object]:
         return {
@@ -337,8 +342,8 @@ class ARKGateway:
         }
 
     async def _parse_call_body(self, request: web.Request) -> tuple[str | None, dict[str, object]]:
-        body = await request.json()
-        request_id = sanitize_string(body.get('request_id', '').strip(), 128) or None
+        body = self.contracts.materialize_payload("runtime.gateway.call_body", await request.json())
+        request_id = sanitize_string(str(body.get('request_id', '')).strip(), 128) or None
         return request_id, validate_payload(body.get('params', {}))
 
     async def _fetch_route(self, capability: str) -> dict[str, object] | None:
@@ -356,13 +361,16 @@ class ARKGateway:
         capability: str,
         params: dict[str, object],
     ) -> dict[str, object]:
-        return {
+        return self.contracts.materialize_payload(
+            "runtime.capability.call_message",
+            {
             "request_id": request_id or f"req-{instance_id}-{utc_timestamp()}",
             "service": service,
             "instance_id": instance_id,
             "capability": capability,
             "params": params,
-        }
+            },
+        )
 
     async def _publish_call(self, call_msg: dict[str, object]) -> None:
         await self._publish_nats(
@@ -379,18 +387,9 @@ class ARKGateway:
         payload: dict[str, object],
         capability: str,
     ) -> None:
-        result = self.gsb.publish(
-            GSBRecord(
-                action="gateway.publish",
-                capability=capability,
-                payload={"subject": subject, "keys": sorted(payload)[:16]},
-                source=EventSource.ARK_CORE.value,
-                tags={"surface": "gateway"},
-            )
-        )
-        if result.status == "error":
-            raise RuntimeError(result.reason)
-        await target.publish(subject, json.dumps(payload).encode())
+        error = await self.audit.publish_json(target, subject, payload, capability)
+        if error:
+            raise RuntimeError(error["reason"])
 
     def _queued_response(self, call_msg: dict[str, object]) -> dict[str, object]:
         return {
