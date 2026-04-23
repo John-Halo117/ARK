@@ -8,19 +8,33 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
 from typing import Dict, Any, List
 
 import aiohttp
 from ark.config import load_unifi_config
-import nats
-from nats.errors import Error as NATSError
+from ark.emitter_contracts import (
+    build_unifi_device_online_plan,
+    build_unifi_device_status_change_plan,
+    build_unifi_network_metric_plan,
+)
+from ark.event_schema import EventSource
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.reducers import KeyedItemsReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit
+try:
+    import nats
+    from nats.errors import Error as NATSError
+except ImportError:  # pragma: no cover - local import/test environments
+    nats = None
+    NATSError = RuntimeError
 
 from ark.subjects import (
     MESH_REGISTER, MESH_HEARTBEAT,
     EVENT_NETWORK_DEVICE, METRICS_NETWORK,
     call_subscribe_subject, reply_subject, parse_capability_from_subject,
 )
+from ark.time_utils import utc_now_iso
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,13 +70,43 @@ class UniFiEmitter:
         self.js = None
         self.session = None
         self.event_count = 0
-        self.tracked_devices: Dict[str, Any] = {}
         self.auth_cookie = None
+        self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.EMITTER_UNIFI.value,
+            surface="emitter",
+            default_tags={"emitter": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
+        self.reducer_engine = ReducerEngine(
+            (
+                KeyedItemsReducer(
+                    name="emitter.unifi.devices",
+                    key_field="device_id",
+                    upsert_event="unifi.device_observed",
+                ),
+            )
+        )
+        self.tracked_devices: Dict[str, Any] = self.reducer_engine.view("emitter.unifi.devices")["items"]
+        self.dispatch = DispatchRegistry(
+            (
+                DispatchDescriptor("network.devices", self.get_devices),
+                DispatchDescriptor("network.events", self.get_events),
+                DispatchDescriptor("network.stats", self.get_stats),
+                DispatchDescriptor("device.status", self.get_device_status),
+                DispatchDescriptor("wireless.clients", self.get_wireless_clients),
+                DispatchDescriptor("network.health", self.get_network_health),
+            ),
+            contracts=self.contracts,
+        )
         
         logger.info(f"UniFi Emitter initialized (instance={self.instance_id})")
     
     async def connect(self):
         """Connect to NATS and authenticate with UniFi"""
+        if nats is None:
+            raise RuntimeError("nats package is not installed")
         try:
             # UniFi controllers typically use self-signed certificates.
             # Set UNIFI_CA_BUNDLE to a CA cert path to enable verification.
@@ -133,12 +177,12 @@ class UniFiEmitter:
                 "version": "1.0.0",
                 "unifi_url": self.unifi_url,
                 "unifi_site": self.unifi_site,
-                "started_at": datetime.utcnow().isoformat()
+                "started_at": utc_now_iso()
             },
             "ttl": 10
         }
         
-        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
+        await self._publish_nats(self.nc, MESH_REGISTER, event, "emitter.register")
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -147,13 +191,13 @@ class UniFiEmitter:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
+                await self._publish_nats(self.nc, MESH_HEARTBEAT, {
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.event_count / 100.0,
                     "healthy": True,
-                    "timestamp": datetime.utcnow().isoformat()
-                }).encode())
+                    "timestamp": utc_now_iso()
+                }, "emitter.heartbeat")
                 
                 self.event_count = 0
                 
@@ -186,12 +230,18 @@ class UniFiEmitter:
                         await self.emit_device_online(device_id, device_name, ip_address)
                     
                     # Update tracked device
-                    self.tracked_devices[device_id] = {
-                        "name": device_name,
-                        "status": status,
-                        "ip": ip_address,
-                        "last_update": datetime.utcnow().isoformat()
-                    }
+                    self.reducer_engine.apply(
+                        "unifi.device_observed",
+                        {
+                            "device_id": device_id,
+                            "value": {
+                                "name": device_name,
+                                "status": status,
+                                "ip": ip_address,
+                                "last_update": utc_now_iso(),
+                            },
+                        },
+                    )
                 
                 # Emit client count metric
                 if clients:
@@ -259,16 +309,13 @@ class UniFiEmitter:
     async def emit_device_online(self, device_id: str, device_name: str, ip: str):
         """Emit device online event"""
         try:
-            event = {
-                "event": "device_online",
-                "device_id": device_id,
-                "device_name": device_name,
-                "ip_address": ip,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "unifi"
-            }
-            
-            await self.js.publish(EVENT_NETWORK_DEVICE, json.dumps(event).encode())
+            plan = build_unifi_device_online_plan(
+                device_id=device_id,
+                device_name=device_name,
+                ip_address=ip,
+                timestamp=utc_now_iso(),
+            )
+            await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.info(f"Device online: {device_name} ({ip})")
             self.event_count += 1
@@ -280,18 +327,15 @@ class UniFiEmitter:
                                        ip: str, old_status: str, new_status: str):
         """Emit device status change event"""
         try:
-            event = {
-                "event": "device_status_changed",
-                "device_id": device_id,
-                "device_name": device_name,
-                "ip_address": ip,
-                "old_status": old_status,
-                "new_status": new_status,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "unifi"
-            }
-            
-            await self.js.publish(EVENT_NETWORK_DEVICE, json.dumps(event).encode())
+            plan = build_unifi_device_status_change_plan(
+                device_id=device_id,
+                device_name=device_name,
+                ip_address=ip,
+                old_status=old_status,
+                new_status=new_status,
+                timestamp=utc_now_iso(),
+            )
+            await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.info(f"Device status changed: {device_name} {old_status} → {new_status}")
             self.event_count += 1
@@ -302,13 +346,13 @@ class UniFiEmitter:
     async def emit_network_metric(self, metric_name: str, value: float, unit: str):
         """Emit network metric"""
         try:
-            await self.js.publish(METRICS_NETWORK, json.dumps({
-                "name": f"network.{metric_name}",
-                "value": value,
-                "unit": unit,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "unifi"
-            }).encode())
+            plan = build_unifi_network_metric_plan(
+                metric_name=metric_name,
+                value=value,
+                unit=unit,
+                timestamp=utc_now_iso(),
+            )
+            await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
         
         except Exception as e:
             logger.error(f"Error emitting network metric: {e}")
@@ -323,7 +367,10 @@ class UniFiEmitter:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     
-                    request = json.loads(msg.data.decode())
+                    request = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
                     params = request.get('params', {})
                     
@@ -331,7 +378,7 @@ class UniFiEmitter:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
+                    await self._publish_nats(self.js, reply_subject(request_id), result, "emitter.reply")
                     
                     self.event_count += 1
                 
@@ -343,20 +390,7 @@ class UniFiEmitter:
     
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle capability requests"""
-        if capability == "network.devices":
-            return await self.get_devices(params)
-        elif capability == "network.events":
-            return await self.get_events(params)
-        elif capability == "network.stats":
-            return await self.get_stats(params)
-        elif capability == "device.status":
-            return await self.get_device_status(params)
-        elif capability == "wireless.clients":
-            return await self.get_wireless_clients(params)
-        elif capability == "network.health":
-            return await self.get_network_health(params)
-        else:
-            return {"error": f"Unknown capability: {capability}"}
+        return await self.audit.execute(self.dispatch, capability, params)
     
     async def get_devices(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get all network devices"""
@@ -366,7 +400,7 @@ class UniFiEmitter:
             "capability": "network.devices",
             "devices": list(self.tracked_devices.values()),
             "total_devices": len(self.tracked_devices),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
     
     async def get_events(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -375,7 +409,7 @@ class UniFiEmitter:
             "agent": self.service_name,
             "capability": "network.events",
             "events": [],
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
     
     async def get_stats(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -388,7 +422,7 @@ class UniFiEmitter:
             "capability": "network.stats",
             "device_count": len(devices),
             "client_count": len(clients),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
     
     async def get_device_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -401,7 +435,7 @@ class UniFiEmitter:
                 "capability": "device.status",
                 "device_id": device_id,
                 "info": self.tracked_devices[device_id],
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": utc_now_iso()
             }
         
         return {
@@ -418,7 +452,7 @@ class UniFiEmitter:
             "capability": "wireless.clients",
             "clients": clients,
             "total_clients": len(clients),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
     
     async def get_network_health(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -438,8 +472,11 @@ class UniFiEmitter:
             "total_devices": len(devices),
             "connected_clients": len(clients),
             "status": "healthy" if health_score >= 90 else "degraded" if health_score >= 70 else "critical",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
+
+    async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
+        await self.audit.publish_json(target, subject, payload, capability)
     
     async def run(self):
         """Main emitter loop"""

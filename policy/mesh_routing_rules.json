@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "default_decision": "first_healthy",
+  "rules": [
+    {
+      "name": "lowest_load_when_load_aware",
+      "decision": "lowest_load",
+      "conditions": [
+        {"field": "load_aware", "op": "eq", "value": true}
+      ]
+    }
+  ]
+}

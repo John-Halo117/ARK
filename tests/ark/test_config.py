@@ -35,3 +35,13 @@ def test_unifi_enforces_https_default(monkeypatch):
     monkeypatch.setenv("UNIFI_URL", "http://unifi:8443")
     cfg = config.load_unifi_config()
     assert cfg.unifi_url == "https://unifi:8443"
+
+
+def test_global_state_bus_config_is_bounded(monkeypatch):
+    monkeypatch.setenv("ARK_GSB_MAX_PAYLOAD_BYTES", "999999999")
+    monkeypatch.setenv("ARK_GSB_MAX_TAG_COUNT", "999")
+    cfg = config.load_global_state_bus_config()
+
+    assert cfg.enabled is True
+    assert cfg.max_payload_bytes == 4_194_304
+    assert cfg.max_tag_count == 64

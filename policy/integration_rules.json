@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "default_decision": "allow",
+  "rules": [
+    {
+      "name": "allow_all_local_integrations",
+      "decision": "allow",
+      "conditions": [],
+      "output": {
+        "enabled": true
+      }
+    }
+  ]
+}
