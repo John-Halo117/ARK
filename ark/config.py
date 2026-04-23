@@ -55,6 +55,27 @@ class ComposioConfig:
 
 
 @dataclass(frozen=True)
+class IntegrationConfig:
+    web_fetch_timeout_s: int
+    web_fetch_max_bytes: int
+    web_search_url: str
+    web_search_timeout_s: int
+    web_search_max_results: int
+    maps_geocode_url: str
+    maps_timeout_s: int
+    docker_cli: str
+    docker_timeout_s: int
+
+
+@dataclass(frozen=True)
+class GlobalStateBusConfig:
+    enabled: bool
+    max_payload_bytes: int
+    max_tag_count: int
+    default_source: str
+
+
+@dataclass(frozen=True)
 class HomeAssistantConfig:
     runtime: ServiceRuntimeConfig
     ha_url: str
@@ -112,6 +133,37 @@ def load_composio_config() -> ComposioConfig:
     )
 
 
+def load_integration_config() -> IntegrationConfig:
+    return IntegrationConfig(
+        web_fetch_timeout_s=_read_int_env("ARK_WEB_FETCH_TIMEOUT_S", 5, minimum=1, maximum=30),
+        web_fetch_max_bytes=_read_int_env("ARK_WEB_FETCH_MAX_BYTES", 131_072, minimum=1024, maximum=1_048_576),
+        web_search_url=_validate_url(
+            _read_env("ARK_WEB_SEARCH_URL", ""),
+            "",
+            allowed_schemes=("http", "https"),
+        ),
+        web_search_timeout_s=_read_int_env("ARK_WEB_SEARCH_TIMEOUT_S", 5, minimum=1, maximum=30),
+        web_search_max_results=_read_int_env("ARK_WEB_SEARCH_MAX_RESULTS", 5, minimum=1, maximum=10),
+        maps_geocode_url=_validate_url(
+            _read_env("ARK_MAPS_GEOCODE_URL", ""),
+            "",
+            allowed_schemes=("http", "https"),
+        ),
+        maps_timeout_s=_read_int_env("ARK_MAPS_TIMEOUT_S", 5, minimum=1, maximum=30),
+        docker_cli=_read_env("ARK_DOCKER_CLI", "docker", max_len=128),
+        docker_timeout_s=_read_int_env("ARK_DOCKER_TIMEOUT_S", 3, minimum=1, maximum=15),
+    )
+
+
+def load_global_state_bus_config() -> GlobalStateBusConfig:
+    return GlobalStateBusConfig(
+        enabled=_read_bool_env("ARK_GSB_ENABLED", True),
+        max_payload_bytes=_read_int_env("ARK_GSB_MAX_PAYLOAD_BYTES", 1_048_576, minimum=1024, maximum=4_194_304),
+        max_tag_count=_read_int_env("ARK_GSB_MAX_TAG_COUNT", 32, minimum=1, maximum=64),
+        default_source=_read_env("ARK_GSB_DEFAULT_SOURCE", "ark.core", max_len=128),
+    )
+
+
 def load_homeassistant_config() -> HomeAssistantConfig:
     ha_url = _validate_url(
         _read_env("HA_URL", "http://homeassistant:8123"),
@@ -153,3 +205,21 @@ def load_unifi_config() -> UniFiConfig:
         unifi_site=_read_env("UNIFI_SITE", "default", max_len=128),
         unifi_ca_bundle=_read_env("UNIFI_CA_BUNDLE", "", max_len=1024),
     )
+
+
+def _read_int_env(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    raw = _read_env(name, str(default), max_len=32)
+    try:
+        value = int(raw)
+    except ValueError:
+        value = default
+    return min(maximum, max(minimum, value))
+
+
+def _read_bool_env(name: str, default: bool) -> bool:
+    raw = _read_env(name, "1" if default else "0", max_len=16).lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default

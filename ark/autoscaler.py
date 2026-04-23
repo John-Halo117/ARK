@@ -9,10 +9,12 @@ import json
 import logging
 import subprocess
 import uuid
-from datetime import datetime
 from typing import Dict, List
 
-from nats.errors import Error as NATSError
+try:
+    from nats.errors import Error as NATSError
+except ImportError:  # pragma: no cover - local import/test environments
+    NATSError = RuntimeError
 
 from ark.security import (
     build_safe_docker_cmd,
@@ -24,11 +26,14 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.event_schema import EventSource
+from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
 from ark.subjects import (
     SYSTEM_QUEUE_DEPTH_SUBSCRIBE, SYSTEM_LATENCY_SUBSCRIBE,
     SYSTEM_ASHI, SPAWN_CONFIRMED,
     parse_service_from_queue_depth,
 )
+from ark.time_utils import utc_now_iso
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,15 +46,18 @@ class Autoscaler:
     """Dynamic compute spawner based on demand signals"""
     
     def __init__(self, nats_url: str = "nats://nats:4222", 
-                 docker_sock: str = "/var/run/docker.sock"):
+                 docker_sock: str = "/var/run/docker.sock",
+                 gsb: GlobalStateBus | None = None):
         self.nats_url = nats_url
         self.docker_sock = docker_sock
         self._nats = ResilientNATSConnection(nats_url)
         self.nc = None
         self.js = None
+        self.gsb = gsb or build_global_state_bus()
         self.shutdown = ShutdownCoordinator()
         self.health = HealthCheck("ark-autoscaler")
         self.health.register("nats", lambda: self._nats.is_connected)
+        self.health.register("gsb", lambda: self.gsb.health()["enabled"])
         
         # Spawn config
         self.spawn_config = {
@@ -178,6 +186,8 @@ class Autoscaler:
         config = self.spawn_config[service]
         instance_id = str(uuid.uuid4())[:12]
         container_name = f"ark-{service}-{instance_id}"
+        if not self._publish_gsb("autoscaler.spawn.request", "autoscaler.spawn.request", {"service": service}):
+            return ""
         
         try:
             cmd = build_safe_docker_cmd(
@@ -206,12 +216,12 @@ class Autoscaler:
                 logger.info(f"Spawned {service}/{instance_id}: {container_id}")
                 
                 # Publish spawn event
-                await self.js.publish(SPAWN_CONFIRMED, json.dumps({
+                await self._publish_nats(self.js, SPAWN_CONFIRMED, {
                     "service": service,
                     "instance_id": instance_id,
                     "container_id": container_id,
-                    "timestamp": datetime.utcnow().isoformat()
-                }).encode())
+                    "timestamp": utc_now_iso()
+                }, "autoscaler.spawn.confirmed")
                 
                 return container_id
             else:
@@ -245,6 +255,26 @@ class Autoscaler:
         
         except Exception as e:
             logger.error(f"Termination error for {service}: {e}")
+
+    def _publish_gsb(self, action: str, capability: str, payload: Dict[str, object]) -> bool:
+        result = self.gsb.publish(
+            GSBRecord(
+                action=action,
+                capability=capability,
+                payload=payload,
+                source=EventSource.ARK_CORE.value,
+                tags={"surface": "autoscaler"},
+            )
+        )
+        if result.status == "error":
+            logger.warning("GSB rejected autoscaler feed: %s", result.as_dict())
+            return False
+        return True
+
+    async def _publish_nats(self, target: object, subject: str, payload: Dict[str, object], capability: str) -> None:
+        if not self._publish_gsb("autoscaler.publish", capability, {"subject": subject, "keys": sorted(payload)[:16]}):
+            return
+        await target.publish(subject, json.dumps(payload).encode())
     
     async def monitor_ashi(self):
         """Listen for ASHI (System Health Index) degradation signals"""

@@ -27,6 +27,11 @@ class TestComposioBridge:
             "external.notion",
             "external.calendar",
             "external.crm",
+            "external.web.fetch",
+            "external.web.search",
+            "external.maps.geocode",
+            "external.maps.distance",
+            "system.docker.status",
         ]
         assert self.bridge.capabilities == expected
 
@@ -46,20 +51,20 @@ class TestComposioBridge:
             "subject": "hi",
             "body": "hello",
         })
-        assert result["success"] is False
-        assert "not configured" in result["message"]
+        assert result["status"] == "error"
+        assert result["error_code"] == "ARK_LOCAL_CONNECTOR_NOT_IMPLEMENTED"
 
     @pytest.mark.asyncio
-    async def test_send_email_with_api_key(self):
+    async def test_send_email_ignores_composio_api_key(self):
         self.bridge.composio_api_key = "test-key"
         result = await self.bridge.send_email({
             "to": "a@b.com",
             "subject": "hi",
             "body": "hello",
         })
-        assert result["success"] is True
-        assert result["to"] == "a@b.com"
-        assert result["subject"] == "hi"
+        assert result["status"] == "error"
+        assert result["context"]["to"] == "a@b.com"
+        assert result["context"]["subject"] == "hi"
 
     # ---- github_action ----
 
@@ -67,8 +72,8 @@ class TestComposioBridge:
     async def test_github_action(self):
         result = await self.bridge.github_action({"action": "create_issue", "repo": "org/repo"})
         assert result["capability"] == "external.github"
-        assert result["action"] == "create_issue"
-        assert result["repo"] == "org/repo"
+        assert result["context"]["action"] == "create_issue"
+        assert result["context"]["repo"] == "org/repo"
 
     # ---- slack_message ----
 
@@ -76,7 +81,7 @@ class TestComposioBridge:
     async def test_slack_message(self):
         result = await self.bridge.slack_message({"channel": "#general", "message": "hello"})
         assert result["capability"] == "external.slack"
-        assert result["channel"] == "#general"
+        assert result["context"]["channel"] == "#general"
 
     # ---- notion_action ----
 
@@ -84,7 +89,7 @@ class TestComposioBridge:
     async def test_notion_action(self):
         result = await self.bridge.notion_action({"action": "create_page", "database": "db-1"})
         assert result["capability"] == "external.notion"
-        assert result["action"] == "create_page"
+        assert result["context"]["action"] == "create_page"
 
     # ---- calendar_action ----
 
@@ -99,4 +104,19 @@ class TestComposioBridge:
     async def test_crm_action(self):
         result = await self.bridge.crm_action({"action": "update", "entity": "contact"})
         assert result["capability"] == "external.crm"
-        assert result["entity"] == "contact"
+        assert result["context"]["entity"] == "contact"
+
+    @pytest.mark.asyncio
+    async def test_maps_distance_local_integration(self):
+        result = await self.bridge.handle_capability(
+            "external.maps.distance",
+            {"lat1": 0, "lon1": 0, "lat2": 0, "lon2": 1},
+        )
+        assert result["status"] == "ok"
+        assert result["distance_km"] > 100
+
+    @pytest.mark.asyncio
+    async def test_web_search_requires_local_endpoint(self):
+        result = await self.bridge.handle_capability("external.web.search", {"query": "ark"})
+        assert result["status"] == "error"
+        assert result["error_code"] == "WEB_SEARCH_UNCONFIGURED"

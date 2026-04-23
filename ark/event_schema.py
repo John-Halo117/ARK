@@ -8,7 +8,7 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Any, Optional
 from enum import Enum
 import json
-from datetime import datetime
+from ark.time_utils import utc_timestamp
 
 
 class EventSource(str, Enum):
@@ -166,7 +166,7 @@ def create_event(
         event_id=eid,
         event_type=event_type,
         source=source,
-        timestamp=int(datetime.utcnow().timestamp()),
+        timestamp=utc_timestamp(),
         payload=payload,
         tags=tags
     )

@@ -7,10 +7,12 @@ Manages dynamic service registration, health, and routing decisions
 import asyncio
 import json
 import logging
-from datetime import datetime
 from typing import Dict, List, Any, Optional
 
-from nats.errors import Error as NATSError
+try:
+    from nats.errors import Error as NATSError
+except ImportError:  # pragma: no cover - local import/test environments
+    NATSError = RuntimeError
 
 from ark.security import (
     registration_rate_limiter,
@@ -23,7 +25,10 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.event_schema import EventSource
+from ark.gsb import GSBRecord, GlobalStateBus, build_global_state_bus
 from ark.subjects import MESH_REGISTER, MESH_HEARTBEAT, MESH_REGISTERED
+from ark.time_utils import utc_now_iso, utc_now_naive
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,14 +47,14 @@ class ServiceInstance:
         self.capabilities = capabilities
         self.metadata = metadata or {}
         self.ttl_seconds = ttl_seconds
-        self.registered_at = datetime.utcnow()
-        self.last_heartbeat = datetime.utcnow()
+        self.registered_at = utc_now_naive()
+        self.last_heartbeat = utc_now_naive()
         self.load = 0.0
         self.healthy = True
     
     def is_expired(self) -> bool:
         """Check if heartbeat has expired"""
-        elapsed = (datetime.utcnow() - self.last_heartbeat).total_seconds()
+        elapsed = (utc_now_naive() - self.last_heartbeat).total_seconds()
         return elapsed > self.ttl_seconds
     
     def to_dict(self) -> Dict[str, Any]:
@@ -69,14 +74,16 @@ class ServiceInstance:
 class MeshRegistry:
     """Central service registry and capability router"""
     
-    def __init__(self, nats_url: str = "nats://nats:4222"):
+    def __init__(self, nats_url: str = "nats://nats:4222", gsb: GlobalStateBus | None = None):
         self.nats_url = nats_url
         self._nats = ResilientNATSConnection(nats_url)
         self.nc = None
         self.js = None
+        self.gsb = gsb or build_global_state_bus()
         self.shutdown = ShutdownCoordinator()
         self.health = HealthCheck("ark-mesh-registry")
         self.health.register("nats", lambda: self._nats.is_connected)
+        self.health.register("gsb", lambda: self.gsb.health()["enabled"])
         
         # Registry: service -> instance_id -> ServiceInstance
         self.registry: Dict[str, Dict[str, ServiceInstance]] = {}
@@ -144,6 +151,8 @@ class MeshRegistry:
             return
 
         ttl = max(5, min(int(ttl), 300))  # clamp 5-300s
+        if not self._publish_gsb("mesh.registration", "mesh.registration", {"service": service, "capabilities": safe_caps}):
+            return
         
         # Store instance
         if service not in self.registry:
@@ -163,12 +172,12 @@ class MeshRegistry:
         logger.info("Registered %s/%s: %s", service, instance_id, safe_caps)
         
         # Publish registration event
-        await self.js.publish(MESH_REGISTERED, json.dumps({
+        await self._publish_nats(self.js, MESH_REGISTERED, {
             "service": service,
             "instance_id": instance_id,
             "capabilities": safe_caps,
-            "timestamp": datetime.utcnow().isoformat()
-        }).encode())
+            "timestamp": utc_now_iso()
+        }, "mesh.registered")
     
     async def subscribe_heartbeats(self):
         """Listen for service heartbeats"""
@@ -185,7 +194,7 @@ class MeshRegistry:
                     
                     if service in self.registry and instance_id in self.registry[service]:
                         inst = self.registry[service][instance_id]
-                        inst.last_heartbeat = datetime.utcnow()
+                        inst.last_heartbeat = utc_now_naive()
                         inst.load = load
                         inst.healthy = event.get('healthy', True)
                         logger.debug(f"Heartbeat: {service}/{instance_id} load={load}")
@@ -220,6 +229,8 @@ class MeshRegistry:
     
     async def route_capability(self, capability: str, load_aware: bool = True) -> Optional[tuple]:
         """Route a capability request to best instance"""
+        if not self._publish_gsb("mesh.route", capability, {"load_aware": load_aware}):
+            return None
         if capability not in self.capability_index:
             return None
         
@@ -279,12 +290,32 @@ class MeshRegistry:
             }
         
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now_iso(),
             "services": service_count,
             "instances": instance_count,
             "capabilities": capability_count,
             "service_details": services
         }
+
+    def _publish_gsb(self, action: str, capability: str, payload: Dict[str, Any]) -> bool:
+        result = self.gsb.publish(
+            GSBRecord(
+                action=action,
+                capability=capability,
+                payload=payload,
+                source=EventSource.ARK_CORE.value,
+                tags={"surface": "mesh"},
+            )
+        )
+        if result.status == "error":
+            logger.warning("GSB rejected mesh feed: %s", result.as_dict())
+            return False
+        return True
+
+    async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
+        if not self._publish_gsb("mesh.publish", capability, {"subject": subject, "keys": sorted(payload)[:16]}):
+            return
+        await target.publish(subject, json.dumps(payload).encode())
     
     async def expose_api(self, host: str = "0.0.0.0", port: int = 7000):
         """Expose REST API for mesh queries with security middleware"""
