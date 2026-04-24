@@ -25,10 +25,18 @@ def propose_deltas(
         return []
     proposals: list[CandidateDelta] = []
     for seed in range(bounded_candidates(mode)):
-        patch = getattr(client, "diff")(context, seed=seed)
+        try:
+            patch = getattr(client, "diff")(context, seed=seed)
+        except (RuntimeError, ValueError) as exc:
+            _emit_candidate_error(event_sink, seed, str(exc))
+            continue
         if not patch:
             continue
-        candidate = _candidate_from_patch(patch, "ollama_executor", seed)
+        try:
+            candidate = _candidate_from_patch(patch, "ollama_executor", seed)
+        except ValueError as exc:
+            _emit_candidate_error(event_sink, seed, str(exc))
+            continue
         proposals.append(candidate)
         _emit_candidate(event_sink, candidate)
     return _dedupe(proposals)
@@ -74,5 +82,18 @@ def _emit_candidate(event_sink: object | None, candidate: CandidateDelta) -> Non
                 for line in candidate.patch.splitlines()
                 if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
             ),
+        }
+    )
+
+
+def _emit_candidate_error(event_sink: object | None, seed: int, detail: str) -> None:
+    if event_sink is None:
+        return
+    event_sink(
+        {
+            "stage": "candidate_skipped",
+            "message": f"skipped malformed candidate seed {seed}",
+            "seed": seed,
+            "detail": detail,
         }
     )
