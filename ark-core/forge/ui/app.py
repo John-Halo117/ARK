@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import threading
 from typing import Any
 
 from ..core.orchestrator import ForgeOrchestrator
 from ..exec.git import delta_id
-from ..models.discovery import (
-    compact_runtime_summary,
-    detect_ollama_endpoint,
-    choose_model,
+from ..runtime.bootstrap import (
+    RuntimeStatus,
+    detect_runtime_status,
+    ensure_runtime_ready,
 )
 from ..runtime.config import DEFAULT_UI_STATE_CONFIG
 from ..transform.apply import apply_unified_diff, reverse_unified_diff
@@ -239,11 +240,16 @@ def launch(
             self.machine_state: dict[str, Any] = dict(default_machine_state())
             self.machine_state.update(self.session.machine_state)
             self.runtime_summary = self.session.runtime_summary
+            self.runtime_status = detect_runtime_status(
+                preferred_url=preferred_url,
+                preferred_model=preferred_model,
+            )
             self.applied_history: list[AppliedDeltaRecord] = list(
                 self.session.applied_history
             )
             self._seed_logs = list(self.session.logs)
             self._log_lines = list(self.session.logs)
+            self._runtime_boot_thread: threading.Thread | None = None
 
         def compose(self) -> ComposeResult:
             yield Header(show_clock=True)
@@ -325,7 +331,7 @@ def launch(
             )
             for line in self._seed_logs:
                 self.query_one("#log-view", Log).write_line(line)
-            self._refresh_runtime()
+            self._refresh_runtime(auto_boot=True)
             self._refresh_history()
             if self.session.selected_record_id is not None:
                 selected_index = _find_history_index(
@@ -427,7 +433,7 @@ def launch(
 
         @on(Button.Pressed, "#runtime-button")
         def _on_runtime_pressed(self) -> None:
-            self._refresh_runtime()
+            self._refresh_runtime(auto_boot=True, force_boot=True)
             self._render_panels()
 
         @on(Button.Pressed, "#palette-button")
@@ -592,21 +598,64 @@ def launch(
                 preferred_url=self.preferred_url,
             )
 
-        def _refresh_runtime(self) -> None:
-            endpoint, models = detect_ollama_endpoint(
-                preferred_url=self.preferred_url, timeout_s=5
+        def _refresh_runtime(
+            self,
+            *,
+            auto_boot: bool = False,
+            force_boot: bool = False,
+        ) -> None:
+            status = detect_runtime_status(
+                preferred_url=self.preferred_url,
+                preferred_model=self.preferred_model,
             )
-            model = choose_model(models, preferred=self.preferred_model)
-            self.runtime_summary = compact_runtime_summary(endpoint, model, models)
-            self.machine_state["runtime_endpoint"] = endpoint
-            self.machine_state["runtime_model"] = model
-            self.machine_state["runtime_models"] = models
-            if endpoint is None or model is None:
+            self._apply_runtime_status(status)
+            if auto_boot and not status.ready:
+                self._start_runtime_boot(force=force_boot)
+
+        def _apply_runtime_status(self, status: RuntimeStatus) -> None:
+            self.runtime_status = status
+            self.runtime_summary = status.summary
+            self.machine_state["runtime"] = status.as_dict()
+            self.machine_state["runtime_endpoint"] = status.endpoint
+            self.machine_state["runtime_model"] = status.model
+            self.machine_state["runtime_models"] = list(status.models)
+            if not status.ready:
                 self.machine_state["status"] = "RUNTIME MISSING"
             elif self.machine_state.get("status") == "RUNTIME MISSING":
                 self.machine_state["status"] = "WAITING"
                 self.machine_state["stage_label"] = "idle"
-            self._log(self.runtime_summary)
+            self._log(status.summary)
+
+        def _start_runtime_boot(self, *, force: bool) -> None:
+            if (
+                self._runtime_boot_thread is not None
+                and self._runtime_boot_thread.is_alive()
+            ):
+                return
+            if not force and bool(self.machine_state.get("runtime_boot_attempted")):
+                return
+            self.machine_state["runtime_boot_attempted"] = True
+            self._runtime_boot_thread = threading.Thread(
+                target=self._runtime_boot_worker,
+                daemon=True,
+            )
+            self._runtime_boot_thread.start()
+
+        def _runtime_boot_worker(self) -> None:
+            self._log("Forge is waking up the local AI in the background.")
+            status = ensure_runtime_ready(
+                preferred_url=self.preferred_url,
+                preferred_model=self.preferred_model,
+            )
+            self.call_from_thread(self._apply_runtime_status, status)
+            for action in status.actions:
+                self.call_from_thread(self._log, action)
+            for detail in status.nerd_details:
+                self.call_from_thread(self._log, detail)
+            self.call_from_thread(
+                self._log,
+                status.message if not status.ready else "Local AI is ready.",
+            )
 
         def _refresh_history(self) -> None:
             self.history = load_history_records(artifacts_dir_for_repo(self.repo_root))

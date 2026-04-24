@@ -18,6 +18,7 @@ from ..models.discovery import (
     choose_model,
 )
 from ..models.ollama_client import OllamaClient, OllamaConfig
+from ..runtime.bootstrap import RuntimeStatus
 from ..runtime.config import DEFAULT_UI_STATE_CONFIG
 from ..transform.apply import (
     apply_unified_diff,
@@ -70,6 +71,48 @@ from .session import (
 DEFAULT_BROWSER_PORT = DEFAULT_UI_STATE_CONFIG.default_browser_port
 
 
+def _runtime_status_for_browser(
+    *,
+    preferred_url: str | None = None,
+    preferred_model: str | None = None,
+) -> RuntimeStatus:
+    endpoint, models = detect_ollama_endpoint(
+        preferred_url=preferred_url,
+        timeout_s=5,
+    )
+    model = choose_model(models, preferred=preferred_model)
+    summary = compact_runtime_summary(endpoint, model, models)
+    if endpoint is not None and model is not None:
+        return RuntimeStatus(
+            phase="ready",
+            title="AI is ready",
+            message="Forge can start working right away.",
+            summary=summary,
+            endpoint=endpoint,
+            model=model,
+            models=tuple(models),
+        )
+    if endpoint is not None:
+        return RuntimeStatus(
+            phase="installing",
+            title="Finishing AI setup",
+            message="Forge found the local AI engine and is preparing a coding model.",
+            summary=summary,
+            endpoint=endpoint,
+            model=model,
+            models=tuple(models),
+        )
+    return RuntimeStatus(
+        phase="starting",
+        title="Waking up local AI",
+        message="Forge is trying to start the local AI runtime in the background.",
+        summary=summary,
+        endpoint=endpoint,
+        model=model,
+        models=tuple(models),
+    )
+
+
 class BrowserState:
     """Thin browser wrapper over the shared Forge operator controller."""
 
@@ -94,6 +137,7 @@ class BrowserState:
             runtime_probe=detect_ollama_endpoint,
             model_selector=choose_model,
             history_loader=load_history_records,
+            runtime_status_probe=_runtime_status_for_browser,
         )
         if not restored_logs:
             self.controller.log("Forge browser app ready. Type a task and press Start.")
@@ -103,7 +147,7 @@ class BrowserState:
 
     def refresh_runtime(self) -> None:
         with self._lock:
-            self.controller.refresh_runtime()
+            self.controller.refresh_runtime(auto_boot=True, force_boot=True)
 
     def refresh_history(self) -> None:
         with self._lock:
@@ -1510,7 +1554,7 @@ def _browser_page() -> str:
         linear-gradient(180deg, #000000 0%, #020202 100%);
       color: var(--text);
       min-height: 100vh;
-      padding: 24px 24px 260px;
+      padding: 24px 24px 190px;
     }
     .topbar, .status-strip, .card {
       background: rgba(5, 5, 5, 0.96);
@@ -1678,6 +1722,24 @@ def _browser_page() -> str:
       display: grid;
       gap: 14px;
     }
+    .nerd-shell {
+      display: grid;
+      gap: 12px;
+    }
+    .nerd-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .nerd-block {
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(10, 10, 10, 0.92);
+    }
+    .nerd-span {
+      grid-column: 1 / -1;
+    }
     .task-examples, .preset-grid {
       display: grid;
       gap: 8px;
@@ -1743,15 +1805,34 @@ def _browser_page() -> str:
     }
     .composer {
       position: fixed;
-      left: 24px;
-      right: 24px;
-      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(calc(100% - 24px), 1180px);
+      bottom: 12px;
       background: rgba(0, 0, 0, 0.98);
       border: 1px solid var(--line);
-      border-radius: 24px;
+      border-radius: 22px;
       box-shadow: 0 25px 55px rgba(0, 0, 0, 0.35);
-      padding: 16px;
+      padding: 12px 14px;
       backdrop-filter: blur(18px);
+    }
+    .composer-top {
+      display: grid;
+      gap: 8px;
+    }
+    .composer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .composer-head strong {
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+    .composer-head span {
+      color: var(--muted);
+      font-size: 12px;
     }
     .composer textarea, .composer input, .composer select {
       width: 100%;
@@ -1763,9 +1844,9 @@ def _browser_page() -> str:
       font: inherit;
     }
     .composer textarea {
-      min-height: 88px;
+      min-height: 64px;
       resize: vertical;
-      margin-bottom: 10px;
+      margin-bottom: 0;
     }
     .controls, .actions, .command-row {
       display: flex;
@@ -1781,8 +1862,8 @@ def _browser_page() -> str:
     }
     .advanced summary {
       cursor: pointer;
-      color: var(--muted);
-      font-weight: 600;
+      color: var(--soft);
+      font-weight: 700;
       list-style: none;
     }
     .advanced summary::-webkit-details-marker {
@@ -1822,8 +1903,8 @@ def _browser_page() -> str:
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .workspace { grid-template-columns: 1fr; }
-      .composer .preset-grid, #capabilities-view { grid-template-columns: 1fr; }
-      body { padding-bottom: 360px; }
+      .composer .preset-grid, #capabilities-view, .nerd-grid { grid-template-columns: 1fr; }
+      body { padding-bottom: 280px; }
     }
   </style>
 </head>
@@ -1852,14 +1933,6 @@ def _browser_page() -> str:
             <div class="helper-title">Example tasks</div>
             <div id="example-tasks" class="task-examples"></div>
           </div>
-          <div>
-            <div class="helper-title">AI setup</div>
-            <ol id="doctor" class="quickstart"></ol>
-          </div>
-          <details class="helper-details">
-            <summary>Help and shortcuts</summary>
-            <ul id="legend" class="legend"></ul>
-          </details>
         </div>
       </section>
       <section id="candidate-card" class="card hidden">
@@ -1895,49 +1968,74 @@ def _browser_page() -> str:
           <p class="section-note">Forge tries to break its own change before you use it.</p>
           <pre id="redteam-view">No result selected yet.</pre>
         </section>
-        <section class="card pane">
-          <h2>Activity Log</h2>
-          <p class="section-note">Plain trail of what happened, newest at the bottom.</p>
-          <pre id="logs-view">Starting Forge…</pre>
-        </section>
         <section class="card pane wide">
-          <h2>Files Involved</h2>
-          <p class="section-note">The files Forge believes are relevant to the selected result.</p>
-          <pre id="files-view">Nothing selected yet.</pre>
-        </section>
-        <section class="card pane wide">
-          <h2>Connected Tools</h2>
-          <p class="section-note">Local tools Forge can see right now. Nothing here runs silently.</p>
-          <div id="capabilities-view" class="preset-grid"></div>
+          <details class="helper-details nerd-shell">
+            <summary>Nerd Stuff</summary>
+            <p class="section-note">Diagnostics, logs, exact tool status, and advanced controls live here.</p>
+            <div class="nerd-grid">
+              <section class="nerd-block">
+                <div class="helper-title">AI diagnostics</div>
+                <ol id="doctor" class="quickstart"></ol>
+                <ul id="runtime-actions" class="quickstart"></ul>
+              </section>
+              <section class="nerd-block">
+                <div class="helper-title">Shortcuts and commands</div>
+                <ul id="legend" class="legend"></ul>
+              </section>
+              <section class="nerd-block">
+                <div class="helper-title">Activity log</div>
+                <pre id="logs-view">Starting Forge…</pre>
+              </section>
+              <section class="nerd-block">
+                <div class="helper-title">Files involved</div>
+                <pre id="files-view">Nothing selected yet.</pre>
+              </section>
+              <section class="nerd-block nerd-span">
+                <div class="helper-title">Connected tools</div>
+                <div id="capabilities-view" class="preset-grid"></div>
+              </section>
+            </div>
+          </details>
         </section>
       </section>
     </section>
   </div>
 
   <section class="composer">
-    <textarea id="task-input" placeholder="What would you like Forge to change? Example: Make the login error easier to understand without changing how sign-in works."></textarea>
-    <input id="files-input" placeholder="Optional: files to focus on, separated by spaces">
+    <div class="composer-top">
+      <div class="composer-head">
+        <strong>Tell Forge what to change</strong>
+        <span>Forge handles the background runtime work for you.</span>
+      </div>
+      <textarea id="task-input" placeholder="Example: Make the login error easier to understand without changing how sign-in works."></textarea>
+    </div>
     <input id="tool-profile-input" type="hidden" value="codex">
-    <div class="controls">
-      <span class="small">Tool style</span>
-      <div id="tool-profiles" class="preset-grid"></div>
-    </div>
-    <div class="controls">
-      <span class="small">Workflow</span>
-      <div id="workflow-presets" class="preset-grid"></div>
-    </div>
     <div class="actions">
       <button class="button primary" id="run-button">Start</button>
       <button class="button" id="step-button">Try Once</button>
       <button class="button warn" id="stop-button">Stop</button>
-      <button class="button" id="runtime-button">Check Tools</button>
       <button class="button" id="accept-button">Use This Change</button>
       <button class="button bad" id="reject-button">Skip This Change</button>
-      <button class="button" id="export-button">Save Snapshot</button>
-      <button class="button bad" id="shutdown-button">Close App</button>
     </div>
     <details class="advanced">
-      <summary>Expert tools</summary>
+      <summary>More options</summary>
+      <input id="files-input" placeholder="Optional: files to focus on, separated by spaces">
+      <div class="controls">
+        <span class="small">Tool style</span>
+        <div id="tool-profiles" class="preset-grid"></div>
+      </div>
+      <div class="controls">
+        <span class="small">Workflow</span>
+        <div id="workflow-presets" class="preset-grid"></div>
+      </div>
+      <div class="actions">
+        <button class="button" id="runtime-button">Check AI</button>
+        <button class="button" id="export-button">Save Snapshot</button>
+        <button class="button bad" id="shutdown-button">Close App</button>
+      </div>
+    </details>
+    <details class="advanced">
+      <summary>Nerd Stuff</summary>
       <div class="controls">
         <label class="check"><input type="checkbox" id="auto-input"> Auto loop</label>
         <label class="check"><input type="checkbox" id="apply-input" checked> Apply accepted result</label>
@@ -1993,6 +2091,7 @@ def _browser_page() -> str:
       files: document.getElementById("files-view"),
       logs: document.getElementById("logs-view"),
       capabilities: document.getElementById("capabilities-view"),
+      runtimeActions: document.getElementById("runtime-actions"),
       candidateList: document.getElementById("candidate-list"),
       historyList: document.getElementById("history-list"),
       candidateCard: document.getElementById("candidate-card"),
@@ -2082,6 +2181,7 @@ def _browser_page() -> str:
 
       renderList(ids.quickstart, data.quickstart, item => `<li>${escapeHtml(item)}</li>`);
       renderList(ids.doctor, data.doctor, item => `<li>${escapeHtml(item)}</li>`);
+      renderList(ids.runtimeActions, (data.runtime && data.runtime.actions) || [], item => `<li>${escapeHtml(item)}</li>`);
       renderList(ids.legend, data.legend, item => `<li><strong>${escapeHtml(item.command)}</strong>${escapeHtml(item.meaning)}</li>`);
       renderTaskExamples(data.example_tasks || []);
       renderPresets(data.workflow_presets || [], data.controls);
@@ -2113,9 +2213,10 @@ def _browser_page() -> str:
     }
 
     function renderRuntimeBanner(data) {
-      const summary = data.runtime_summary || "";
-      const ready = !summary.toLowerCase().includes("not detected") && !summary.toLowerCase().includes("models: none");
-      const title = ready ? "AI is ready" : "AI needs attention";
+      const runtime = data.runtime || {};
+      const ready = Boolean(runtime.ready);
+      const title = runtime.title || (ready ? "AI is ready" : "Waking up local AI");
+      const summary = runtime.message || data.runtime_summary || "";
       const steps = (data.doctor || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
       ids.runtimeBanner.className = `runtime-banner ${ready ? "good" : "bad"}`;
       ids.runtimeBanner.innerHTML = `<strong>${title}</strong><span>${escapeHtml(summary)}</span><ol class="quickstart">${steps}</ol>`;

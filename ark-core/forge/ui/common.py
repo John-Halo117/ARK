@@ -347,15 +347,15 @@ def quickstart_steps() -> list[str]:
 def runtime_doctor_steps(runtime_summary: str) -> list[str]:
     if "not detected" in runtime_summary.lower():
         return [
-            "Open the Ollama app and wait a few seconds.",
-            "Click Check Tools.",
-            "If it still fails, restart Ollama and try again.",
+            "Forge will try to wake up the local AI for you in the background.",
+            "Keep this window open for a moment and click Check AI if it still looks stuck.",
+            "Open Nerd Stuff only if you want the exact diagnostics.",
         ]
     if "(models: none)" in runtime_summary.lower():
         return [
-            "Ollama is running, but no coding model is loaded yet.",
-            "Run `ollama pull qwen3-coder:30b` once.",
-            "Click Check Tools again after the model finishes loading.",
+            "Forge found the local AI engine, but it still needs a coding model.",
+            "The first setup may continue in the background for a few minutes.",
+            "Open Nerd Stuff if you want the exact model and setup details.",
         ]
     return list(DEFAULT_UI_STATE_CONFIG.runtime_help_ready)
 
@@ -824,6 +824,6 @@ def runtime_doctor_message(runtime_summary: str) -> str:
     if "not detected" not in runtime_summary.lower():
         return runtime_summary
     return (
-        "Runtime missing. Start Ollama with `ollama serve`, pull a coder model like "
-        "`ollama pull qwen3-coder:30b`, then press Check Tools."
+        "Forge is trying to wake up the local AI for you. "
+        "If it still does not come online, open Nerd Stuff for exact setup steps."
     )

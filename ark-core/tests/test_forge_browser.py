@@ -34,6 +34,7 @@ def test_browser_snapshot_exposes_quickstart_and_legend(
     assert snapshot["workflow_presets"]
     assert snapshot["tool_profiles"]
     assert snapshot["capabilities"]
+    assert snapshot["runtime"]["ready"] is True
     assert "qwen3-coder:30b" in snapshot["runtime_summary"]
 
 

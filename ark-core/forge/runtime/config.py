@@ -82,6 +82,20 @@ class RuntimeCapabilityConfig:
 
 
 @dataclass(frozen=True)
+class RuntimeBootstrapConfig:
+    """Bounded local-runtime startup defaults for low-friction Forge boot."""
+
+    detect_timeout_s: int = 5
+    poll_attempts: int = 12
+    poll_interval_s: float = 1.0
+    auto_start_ollama: bool = True
+    auto_pull_model: bool = True
+    bootstrap_model: str = "qwen2.5-coder:7b"
+    ollama_start_commands: tuple[tuple[str, ...], ...] = (("ollama", "serve"),)
+    ollama_pull_command_prefix: tuple[str, ...] = ("ollama", "pull")
+
+
+@dataclass(frozen=True)
 class McpRuntimeConfig:
     """Central local MCP-style tool runtime defaults."""
 
@@ -145,8 +159,8 @@ class UiStateConfig:
     quickstart: tuple[str, ...] = (
         "Type what you want changed in plain English.",
         "Press Start and let Forge prepare a safe code change.",
-        "Review the proposed change and checks on the screen.",
-        "Choose Use This Change if it looks right, or Skip This Change if it does not.",
+        "Watch the proposed change and checks update live.",
+        "Use This Change if it looks right, or Skip This Change if it does not.",
     )
     example_tasks: tuple[str, ...] = (
         "Fix the failing tests without changing product behavior.",
@@ -160,7 +174,7 @@ class UiStateConfig:
         ("Stop", "Ask Forge to stop after the current pass"),
         ("Use This Change", "Apply the selected safe change"),
         ("Skip This Change", "Discard the current option"),
-        ("Check Tools", "Verify Ollama, Docker, and configured local tools"),
+        ("Check AI", "Recheck the local AI runtime and wake it up if possible"),
         ("resume", "Continue the last interrupted task"),
         ("revert", "Preview the last safe undo"),
         ("revert apply", "Undo the last change Forge applied"),
@@ -284,5 +298,6 @@ DEFAULT_CONTEXT_CONFIG = ContextBuildConfig()
 DEFAULT_POLICY_CONFIG = ForgePolicyConfig()
 DEFAULT_STRUCTURE_CONFIG = StructurePolicyConfig()
 DEFAULT_RUNTIME_CAPABILITY_CONFIG = RuntimeCapabilityConfig()
+DEFAULT_RUNTIME_BOOTSTRAP_CONFIG = RuntimeBootstrapConfig()
 DEFAULT_MCP_RUNTIME_CONFIG = McpRuntimeConfig()
 DEFAULT_UI_STATE_CONFIG = UiStateConfig()

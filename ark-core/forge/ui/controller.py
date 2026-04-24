@@ -5,8 +5,14 @@ from __future__ import annotations
 from collections import deque
 import json
 from pathlib import Path
+import threading
 from typing import Any, Callable
 
+from ..runtime.bootstrap import (
+    RuntimeStatus,
+    detect_runtime_status,
+    ensure_runtime_ready,
+)
 from ..runtime.config import (
     DEFAULT_CONTEXT_CONFIG,
     DEFAULT_UI_STATE_CONFIG,
@@ -76,6 +82,8 @@ class ForgeOperatorController:
         history_loader: Callable[..., list[HistoryRecord]] | None = None,
         client_builder: Callable[..., tuple[object | None, str]] | None = None,
         capability_detector: Callable[[Path], list[CapabilityStatus]] | None = None,
+        runtime_status_probe: Callable[..., RuntimeStatus] | None = None,
+        runtime_bootstrapper: Callable[..., RuntimeStatus] | None = None,
     ) -> None:
         self.repo_root = repo_root
         self.preferred_model = preferred_model
@@ -87,6 +95,8 @@ class ForgeOperatorController:
         self.history_loader = history_loader
         self.client_builder = client_builder
         self.capability_detector = capability_detector
+        self.runtime_status_probe = runtime_status_probe
+        self.runtime_bootstrapper = runtime_bootstrapper
         self.session_path = default_session_path(repo_root)
         self.session = load_session(self.session_path)
         self.history: list[HistoryRecord] = []
@@ -105,39 +115,85 @@ class ForgeOperatorController:
         self.machine_state: dict[str, Any] = dict(default_machine_state())
         self.machine_state.update(self.session.machine_state)
         self.runtime_summary = self.session.runtime_summary
+        self.runtime_status = detect_runtime_status(
+            preferred_url=preferred_url,
+            preferred_model=preferred_model,
+        )
         self.applied_history: list[AppliedDeltaRecord] = list(
             self.session.applied_history
         )
         self.capabilities: list[CapabilityStatus] = []
+        self._runtime_boot_thread: threading.Thread | None = None
         restored_logs = bool(self.logs)
-        self.refresh_runtime(log_runtime=True)
+        self.refresh_runtime(log_runtime=True, auto_boot=True)
         self.refresh_history()
         if not restored_logs:
             self.log("Forge ready. Type a task and press Start.")
 
-    def refresh_runtime(self, *, log_runtime: bool = True) -> None:
-        from ..models.discovery import (
-            compact_runtime_summary,
-            detect_ollama_endpoint,
-            choose_model,
+    def refresh_runtime(
+        self,
+        *,
+        log_runtime: bool = True,
+        auto_boot: bool = False,
+        force_boot: bool = False,
+    ) -> None:
+        status = (self.runtime_status_probe or detect_runtime_status)(
+            preferred_url=self.preferred_url,
+            preferred_model=self.preferred_model,
         )
+        self._apply_runtime_status(status, log_runtime=log_runtime)
+        if auto_boot and not status.ready:
+            self._start_runtime_boot(force=force_boot)
 
-        probe = self.runtime_probe or detect_ollama_endpoint
-        select_model = self.model_selector or choose_model
-        endpoint, models = probe(preferred_url=self.preferred_url, timeout_s=5)
-        model = select_model(models, preferred=self.preferred_model)
-        self.runtime_summary = compact_runtime_summary(endpoint, model, models)
-        self.machine_state["runtime_endpoint"] = endpoint
-        self.machine_state["runtime_model"] = model
-        self.machine_state["runtime_models"] = models
-        if endpoint is None or model is None:
+    def _apply_runtime_status(
+        self,
+        status: RuntimeStatus,
+        *,
+        log_runtime: bool,
+    ) -> None:
+        self.runtime_status = status
+        self.runtime_summary = status.summary
+        self.machine_state["runtime"] = status.as_dict()
+        self.machine_state["runtime_endpoint"] = status.endpoint
+        self.machine_state["runtime_model"] = status.model
+        self.machine_state["runtime_models"] = list(status.models)
+        if not status.ready:
             self.machine_state["status"] = "RUNTIME MISSING"
         elif self.machine_state.get("status") == "RUNTIME MISSING":
             self.machine_state["status"] = "WAITING"
             self.machine_state["stage_label"] = "idle"
         if log_runtime:
-            self.log(self.runtime_summary)
+            self.log(status.summary)
         self.refresh_capabilities()
+
+    def _start_runtime_boot(self, *, force: bool) -> None:
+        if (
+            self._runtime_boot_thread is not None
+            and self._runtime_boot_thread.is_alive()
+        ):
+            return
+        if not force and bool(self.machine_state.get("runtime_boot_attempted")):
+            return
+        self.machine_state["runtime_boot_attempted"] = True
+        self._runtime_boot_thread = threading.Thread(
+            target=self._runtime_boot_worker,
+            daemon=True,
+        )
+        self._runtime_boot_thread.start()
+
+    def _runtime_boot_worker(self) -> None:
+        self.log("Forge is waking up the local AI in the background.")
+        status = (self.runtime_bootstrapper or ensure_runtime_ready)(
+            preferred_url=self.preferred_url,
+            preferred_model=self.preferred_model,
+        )
+        self._apply_runtime_status(status, log_runtime=False)
+        for action in status.actions:
+            self.log(action)
+        for detail in status.nerd_details:
+            self.log(detail)
+        self.log(status.message if not status.ready else "Local AI is ready.")
+        self.persist_session()
 
     def refresh_capabilities(self) -> None:
         detector = self.capability_detector or detect_capabilities
@@ -216,6 +272,7 @@ class ForgeOperatorController:
             "controls": dict(self.controls),
             "quickstart": quickstart_steps(),
             "doctor": runtime_doctor_steps(self.runtime_summary),
+            "runtime": self.runtime_status.as_dict(),
             "applied_history": [item.as_dict() for item in self.applied_history],
             "legend": [
                 {"command": command, "meaning": meaning}
