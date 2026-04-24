@@ -35,7 +35,7 @@ def run_task(
 
     context_provider_impl = context_provider or DefaultContextProvider()
     verifier_impl = verifier or PythonVerifierAdapter()
-    ensure_iteration_budget(0)
+    ensure_iteration_budget(state.attempt)
     context, pre_phi, repeated, mode = _prepare_context_and_control(
         task,
         repo_root,
