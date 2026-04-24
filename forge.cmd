@@ -71,13 +71,29 @@ if exist "%PYTHON_BIN%" exit /b 0
 
 where py >nul 2>nul
 if not errorlevel 1 (
-  set "PYTHON_BIN=py"
-  exit /b 0
+  for /f "usebackq delims=" %%I in (`py -3 -c "import sys; print(sys.executable)" 2^>nul`) do (
+    set "PYTHON_BIN=%%I"
+  )
+  if defined PYTHON_BIN if exist "%PYTHON_BIN%" exit /b 0
 )
 
 where python >nul 2>nul
 if not errorlevel 1 (
-  set "PYTHON_BIN=python"
+  for /f "usebackq delims=" %%I in (`where python 2^>nul`) do (
+    if not defined PYTHON_BIN set "PYTHON_BIN=%%I"
+  )
+  if defined PYTHON_BIN if exist "%PYTHON_BIN%" exit /b 0
+)
+
+where python3 >nul 2>nul
+if not errorlevel 1 (
+  for /f "usebackq delims=" %%I in (`where python3 2^>nul`) do (
+    if not defined PYTHON_BIN set "PYTHON_BIN=%%I"
+  )
+  if defined PYTHON_BIN if exist "%PYTHON_BIN%" exit /b 0
+)
+
+if defined PYTHON_BIN (
   exit /b 0
 )
 

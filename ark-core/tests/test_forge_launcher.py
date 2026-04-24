@@ -241,3 +241,14 @@ def test_launcher_without_tty_prints_start_here(
     assert code == 1
     assert "Forge start here" in output
     assert "./forge" in output
+
+
+def test_windows_launchers_resolve_real_python(project_root: Path) -> None:
+    repo_root = project_root.parent
+    cmd_text = (repo_root / "forge.cmd").read_text(encoding="utf-8")
+    ps1_text = (repo_root / "forge.ps1").read_text(encoding="utf-8")
+
+    assert 'set "PYTHON_BIN=py"' not in cmd_text
+    assert '$PythonBin = "py"' not in ps1_text
+    assert "print(sys.executable)" in cmd_text
+    assert "print(sys.executable)" in ps1_text
