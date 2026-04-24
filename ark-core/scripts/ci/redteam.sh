@@ -22,12 +22,17 @@ require_text() {
 
 require_file "docs/ARK_TRUTH_SPINE.md"
 require_file "docs/CODEX_ARK_SYSTEM_PROMPT.md"
+require_file "docs/MISSION_GRADE_RULES.md"
 require_file "docs/REDTEAM.md"
 require_file "docs/TODO_TIERS.md"
 require_file "config/tiering_rules.json"
+require_file "config/operating_rules.json"
+require_file "config/system_invariants.json"
 
 require_text "docs/CODEX_ARK_SYSTEM_PROMPT.md" "only SSOT is actionable truth"
 require_text "docs/CODEX_ARK_SYSTEM_PROMPT.md" "recover()"
+require_text "docs/MISSION_GRADE_RULES.md" "Only the bounded control plane may"
+require_text "docs/MISSION_GRADE_RULES.md" "Every governed transition must record"
 require_text "docs/ARK_TRUTH_SPINE.md" "graph may contain contradictions"
 require_text "docs/ARK_TRUTH_SPINE.md" "All math-layer outputs are derived values, never raw truth."
 require_text "docs/REDTEAM.md" "signature failure"
