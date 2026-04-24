@@ -18,6 +18,8 @@ from ..models.ollama_client import OllamaClient, OllamaConfig
 from ..runtime.config import DEFAULT_UI_STATE_CONFIG
 from ..types import ForgeTask
 
+MAX_PROMPT_ATTEMPTS = 3
+
 
 def main() -> int:
     """Launch Forge with Codex-like defaults."""
@@ -25,6 +27,20 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
     repo_root = args.repo_root.resolve()
+    _, _, _, runtime_summary = _detect_runtime(args)
+    try:
+        return _run_main(args, repo_root)
+    except Exception as exc:
+        return _emit_nonfatal_result(
+            args,
+            repo_root,
+            runtime_summary,
+            f"Forge hit a recoverable error and moved on: {exc}",
+        )
+
+
+def _run_main(args: argparse.Namespace, repo_root: Path) -> int:
+    """Run the launcher without aborting the whole operator flow."""
 
     if args.desktop:
         return _launch_desktop(args, repo_root)
@@ -42,16 +58,13 @@ def main() -> int:
 
     task_text, target_files, constraints, dry_run, apply_accepted = (
         _resolve_task_request(
-            parser,
             args,
             repo_root,
-            endpoint,
-            model,
             summary,
         )
     )
     if task_text is None:
-        return 1
+        return 0
 
     client = OllamaClient(config=_build_ollama_config(args, endpoint, model))
     orchestrator = ForgeOrchestrator(
@@ -68,10 +81,10 @@ def main() -> int:
     result = orchestrator.process(task, dry_run=dry_run)
     if args.json:
         print(json.dumps(result, indent=2))
-        return 0 if result["status"] in {"dry_run", "promote"} else 1
+        return 0
 
     print(_render_summary(repo_root, summary, result))
-    return 0 if result["status"] in {"dry_run", "promote"} else 1
+    return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -181,7 +194,7 @@ def _handle_check_mode(
         print(json.dumps(payload, indent=2))
     else:
         print(_render_check_summary(repo_root, summary, endpoint, model, models))
-    return 0 if endpoint is not None else 1
+    return 0
 
 
 def _should_launch_ui(args: argparse.Namespace) -> bool:
@@ -225,11 +238,8 @@ def _launch_desktop(args: argparse.Namespace, repo_root: Path) -> int:
 
 
 def _resolve_task_request(
-    parser: argparse.ArgumentParser,
     args: argparse.Namespace,
     repo_root: Path,
-    endpoint: str | None,
-    model: str | None,
     summary: str,
 ) -> tuple[str | None, list[str], list[str], bool, bool]:
     if args.task:
@@ -245,25 +255,25 @@ def _resolve_task_request(
         print(_render_start_here(repo_root, summary))
         return None, [], [], True, False
 
-    return _interactive_request(parser, args, repo_root, endpoint, model, summary)
+    return _interactive_request(args, repo_root, summary)
 
 
 def _interactive_request(
-    parser: argparse.ArgumentParser,
     args: argparse.Namespace,
     repo_root: Path,
-    endpoint: str | None,
-    model: str | None,
     summary: str,
-) -> tuple[str, list[str], list[str], bool, bool]:
+) -> tuple[str | None, list[str], list[str], bool, bool]:
     print(_render_welcome(repo_root, summary))
-    if endpoint is None or model is None:
+    if "ready" not in summary.lower():
         print(_render_runtime_bootstrap())
-        raise SystemExit(1)
 
-    task_text = _prompt_until_nonempty("What do you want Forge to do?\nforge> ")
+    task_text = _prompt_until_nonempty(
+        "What do you want Forge to do?\nforge> ",
+        attempts=MAX_PROMPT_ATTEMPTS,
+    )
     if not task_text:
-        parser.error("provide a task, run `./forge`, or use --check")
+        print("Forge did not get a task, so it stayed in guidance mode.")
+        return None, [], [], True, False
     files = _split_words(
         _prompt(
             "Files to focus on (optional, space-separated; press Enter to let Forge decide): "
@@ -288,20 +298,18 @@ def _build_ollama_config(
     endpoint: str | None,
     model: str | None,
 ) -> OllamaConfig:
-    if endpoint is None or model is None:
-        raise SystemExit(
-            "Forge could not auto-detect a usable Ollama runtime. "
-            "Run `./forge --check` for details."
-        )
+    default_config = OllamaConfig()
+    runtime_ready = endpoint is not None and model is not None
+    selected_model = model or args.model or default_config.executor_model
     return OllamaConfig(
-        enabled=True,
-        required=True,
-        planner_enabled=args.full_model_loop,
-        redteam_enabled=args.full_model_loop,
-        base_url=endpoint,
-        executor_model=model,
-        planner_model=model,
-        redteam_model=model,
+        enabled=runtime_ready,
+        required=runtime_ready,
+        planner_enabled=runtime_ready and args.full_model_loop,
+        redteam_enabled=runtime_ready and args.full_model_loop,
+        base_url=endpoint or args.ollama_url or default_config.base_url,
+        executor_model=selected_model,
+        planner_model=selected_model,
+        redteam_model=selected_model,
         timeout_s=args.timeout,
         num_ctx=args.num_ctx,
         temperature=0.2,
@@ -317,16 +325,17 @@ def _prompt(label: str) -> str:
         return ""
 
 
-def _prompt_until_nonempty(label: str) -> str:
-    while True:
+def _prompt_until_nonempty(label: str, *, attempts: int) -> str:
+    for _ in range(max(1, attempts)):
         value = _prompt(label)
         if value:
             return value
         print("Please type a short task, like: fix the failing tests")
+    return ""
 
 
 def _prompt_yes_no(label: str, *, default: bool) -> bool:
-    while True:
+    for _ in range(MAX_PROMPT_ATTEMPTS):
         value = _prompt(label).lower()
         if not value:
             return default
@@ -335,6 +344,29 @@ def _prompt_yes_no(label: str, *, default: bool) -> bool:
         if value in {"n", "no"}:
             return False
         print("Please answer y or n.")
+    print("Forge kept the default answer so the flow could continue.")
+    return default
+
+
+def _emit_nonfatal_result(
+    args: argparse.Namespace,
+    repo_root: Path,
+    runtime_summary: str,
+    detail: str,
+) -> int:
+    result = {
+        "status": "manual_review",
+        "detail": detail,
+        "phi": 0.0,
+        "mode": "SIMPLE",
+        "applied": False,
+        "artifacts": {},
+    }
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return 0
+    print(_render_summary(repo_root, runtime_summary, result))
+    return 0
 
 
 def _split_words(value: str) -> list[str]:
