@@ -238,9 +238,90 @@ def test_launcher_without_tty_prints_start_here(
     code = launcher.main()
     output = capsys.readouterr().out
 
-    assert code == 1
+    assert code == 0
     assert "Forge start here" in output
     assert "./forge" in output
+
+
+def test_launcher_without_runtime_stays_nonfatal(
+    monkeypatch: object, tmp_path: Path, capsys
+) -> None:
+    captured: dict[str, object] = {}
+    prompts = iter(
+        [
+            "fix the greeting bug",
+            "greetings.py",
+            "",
+            "",
+            "",
+        ]
+    )
+
+    class FakeOrchestrator:
+        def __init__(
+            self, repo_root: Path, *, apply_accepted: bool, client: object
+        ) -> None:
+            captured["repo_root"] = repo_root
+            captured["apply_accepted"] = apply_accepted
+            captured["client"] = client
+
+        def process(self, task, *, dry_run: bool):
+            captured["task"] = task
+            captured["dry_run"] = dry_run
+            return {
+                "status": "manual_review",
+                "detail": "no delta candidates were produced",
+                "phi": 0.0,
+                "mode": "SIMPLE",
+                "applied": False,
+                "artifacts": {},
+            }
+
+    monkeypatch.setattr(
+        launcher,
+        "detect_ollama_endpoint",
+        lambda preferred_url=None, timeout_s=5: (None, []),
+    )
+    monkeypatch.setattr(launcher, "choose_model", lambda models, preferred=None: None)
+    monkeypatch.setattr(launcher, "ForgeOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(
+        launcher,
+        "OllamaClient",
+        lambda config: type("FakeClient", (), {"config": config})(),
+    )
+    monkeypatch.setattr(launcher, "_ui_available", lambda: False)
+    monkeypatch.setattr(launcher, "_prompt", lambda label: next(prompts))
+    monkeypatch.setattr(launcher.sys, "stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(
+        "sys.argv", ["forge.py", "--no-ui", "--repo-root", str(tmp_path)]
+    )
+
+    code = launcher.main()
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "could not find a ready Ollama runtime" in output
+    assert captured["repo_root"] == tmp_path
+    assert captured["client"].config.enabled is False
+    assert captured["task"].summary == "fix the greeting bug"
+
+
+def test_launcher_check_mode_missing_runtime_is_nonfatal(
+    monkeypatch: object, capsys
+) -> None:
+    monkeypatch.setattr(
+        launcher,
+        "detect_ollama_endpoint",
+        lambda preferred_url=None, timeout_s=5: (None, []),
+    )
+    monkeypatch.setattr(launcher, "choose_model", lambda models, preferred=None: None)
+    monkeypatch.setattr("sys.argv", ["forge.py", "--check"])
+
+    code = launcher.main()
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "Next step: start Ollama" in output
 
 
 def test_windows_launchers_resolve_real_python(project_root: Path) -> None:
