@@ -8,6 +8,29 @@ architecture docs, shared model types, epistemic resolution primitives, and
 CI/AI enforcement scripts without replacing the existing runtime-oriented main
 repo layout.
 
+## Start Forge
+
+If you only want the self-coding part of ARK, use Forge.
+
+- WSL, Git Bash, or Linux/macOS terminal: `./forge`
+- Browser app: `./forge --desktop`
+- Linux/Arch app install: `./install-forge-arch.sh`
+- PowerShell: `.\forge.ps1`
+- Command Prompt: `forge.cmd`
+- One-click Windows launcher: `Forge App.cmd`
+- Runtime check: `./forge --check`
+
+The fastest beginner path is:
+
+1. Double-click `Forge App.cmd` on Windows, or run `./forge --desktop`.
+2. On Arch Linux, run `./install-forge-arch.sh` once if you want Forge in your app launcher.
+3. Type the task into the Forge composer.
+4. Press `Run`, inspect the live diff/tests/redteam panels, then accept or reject.
+
+The Linux app install is user-local only. It creates no systemd service. Use the Forge Shutdown button when you are done with the browser app.
+
+There is also a short guide at [`FORGE_START_HERE.md`](FORGE_START_HERE.md).
+
 ## Canonical docs
 
 The architecture is intentionally split so each concept has one owner:
@@ -19,6 +42,7 @@ The architecture is intentionally split so each concept has one owner:
 | [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Root system topology |
 | [`ark-core/docs/ARK_TRUTH_SPINE.md`](ark-core/docs/ARK_TRUTH_SPINE.md) | Universal ingest-to-truth architecture |
 | [`ark-core/docs/CODEX_ARK_SYSTEM_PROMPT.md`](ark-core/docs/CODEX_ARK_SYSTEM_PROMPT.md) | Agent/runtime behavior contract |
+| [`ark-core/docs/MISSION_GRADE_RULES.md`](ark-core/docs/MISSION_GRADE_RULES.md) | Mission posture, central operating rules, and invariants |
 | [`ark-core/docs/TODO_TIERS.md`](ark-core/docs/TODO_TIERS.md) | S/T/P governance rules |
 | [`ark-core/docs/REDTEAM.md`](ark-core/docs/REDTEAM.md) | Red Team gates and scenarios |
 | [`ark-core/docs/ark-field-v4.2-foundation.md`](ark-core/docs/ark-field-v4.2-foundation.md) | Field stage bridge into the truth spine |
@@ -403,6 +427,7 @@ Built with Gordon for production deployment.
 | [`ark-core/internal/models/`](ark-core/internal/models/) | Shared event, stability, and ingest-to-truth model types |
 | [`ark-core/internal/epistemic/`](ark-core/internal/epistemic/) | Claim states, conflict groups, resolver, and policy types |
 | [`ark-core/scripts/ai/`](ark-core/scripts/ai/) | Agent prompt + offline orchestration scaffold |
+| [`./forge`](forge) | Low-friction self-coding launcher into the Forge engine |
 | [`ark-core/scripts/ci/`](ark-core/scripts/ci/) | Tier enforcement + Red Team gates |
 | [`ark-core/config/tiering_rules.json`](ark-core/config/tiering_rules.json) | Canonical S/T/P policy configuration |
 

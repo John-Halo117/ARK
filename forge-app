@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON_BIN="$ROOT_DIR/ark-core/.venv/bin/python"
+PORT="${FORGE_DESKTOP_PORT:-4765}"
+URL="http://127.0.0.1:${PORT}/"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/forge"
+LOG_FILE="$STATE_DIR/browser-app-${PORT}.log"
+PID_FILE="$STATE_DIR/browser-app-${PORT}.pid"
+
+mkdir -p "$STATE_DIR"
+
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "Forge could not find a usable Python interpreter." >&2
+    exit 1
+  fi
+fi
+
+probe_app() {
+  "$PYTHON_BIN" - "$URL" <<'PY' >/dev/null 2>&1
+import json
+import sys
+import urllib.error
+import urllib.request
+
+url = sys.argv[1].rstrip("/") + "/api/state"
+try:
+    with urllib.request.urlopen(url, timeout=1.5) as response:
+        json.load(response)
+except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+}
+
+open_browser() {
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$URL" >/dev/null 2>&1 &
+    return 0
+  fi
+  "$PYTHON_BIN" -m webbrowser "$URL" >/dev/null 2>&1 &
+}
+
+if probe_app; then
+  open_browser || true
+  exit 0
+fi
+
+if command -v setsid >/dev/null 2>&1; then
+  setsid "$ROOT_DIR/forge" --desktop --no-browser --desktop-port "$PORT" >"$LOG_FILE" 2>&1 < /dev/null &
+else
+  nohup "$ROOT_DIR/forge" --desktop --no-browser --desktop-port "$PORT" >"$LOG_FILE" 2>&1 < /dev/null &
+fi
+echo "$!" >"$PID_FILE"
+
+for _attempt in {1..40}; do
+  if probe_app; then
+    open_browser || true
+    echo "Forge browser app launched at $URL"
+    echo "No systemd service was created. Use the Forge Shutdown button when you are done."
+    exit 0
+  fi
+  sleep 0.25
+done
+
+echo "Forge browser app did not become ready." >&2
+echo "Check the log: $LOG_FILE" >&2
+exit 1

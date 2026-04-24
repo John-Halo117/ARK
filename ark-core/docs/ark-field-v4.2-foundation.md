@@ -7,6 +7,7 @@ The Stage 1 scaffold now sits under a canonical doc set:
 
 - [`ARK_TRUTH_SPINE.md`](ARK_TRUTH_SPINE.md) owns the full ingest-to-truth architecture.
 - [`CODEX_ARK_SYSTEM_PROMPT.md`](CODEX_ARK_SYSTEM_PROMPT.md) owns agent behavior.
+- [`MISSION_GRADE_RULES.md`](MISSION_GRADE_RULES.md) owns mission posture, rules, and invariants.
 - [`SYSTEM_MAP.md`](SYSTEM_MAP.md) owns the compressed topology.
 - [`TODO_TIERS.md`](TODO_TIERS.md) owns S/T/P governance.
 - [`REDTEAM.md`](REDTEAM.md) owns adversarial gates.

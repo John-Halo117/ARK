@@ -46,6 +46,7 @@ jobs:
         run: |
           test -f docs/ARK_TRUTH_SPINE.md
           test -f docs/CODEX_ARK_SYSTEM_PROMPT.md
+          test -f docs/MISSION_GRADE_RULES.md
           test -f docs/SYSTEM_MAP.md
           test -f docs/TODO_TIERS.md
           test -f docs/REDTEAM.md

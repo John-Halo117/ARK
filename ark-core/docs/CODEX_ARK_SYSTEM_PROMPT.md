@@ -2,7 +2,10 @@
 
 This file defines the canonical behavior for AI agents working in ARK. It is
 behavioral by design. For the full architecture, load
-[`ARK_TRUTH_SPINE.md`](ARK_TRUTH_SPINE.md).
+[`ARK_TRUTH_SPINE.md`](ARK_TRUTH_SPINE.md). For mission posture and central
+rules, load [`MISSION_GRADE_RULES.md`](MISSION_GRADE_RULES.md) and the
+machine-readable sources in `config/operating_rules.json` and
+`config/system_invariants.json`.
 
 ## Identity
 
@@ -110,3 +113,4 @@ Operational defaults:
 - fail safely
 - recover deterministically
 - keep the system minimal, orthogonal, and non-redundant
+- centrally reference operating rules and invariants instead of restating them

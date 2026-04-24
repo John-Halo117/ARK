@@ -1,5 +1,20 @@
+from pathlib import Path
 import asyncio
 import inspect
+import sys
+
+
+def _ensure_repo_test_paths() -> None:
+    """Make repo-root pytest runs resolve packages that live under ark-core."""
+
+    repo_root = Path(__file__).resolve().parent
+    ark_core_root = repo_root / "ark-core"
+    ark_core_root_str = str(ark_core_root)
+    if ark_core_root_str not in sys.path:
+        sys.path.insert(0, ark_core_root_str)
+
+
+_ensure_repo_test_paths()
 
 
 def pytest_configure(config):

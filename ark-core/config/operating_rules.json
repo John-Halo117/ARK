@@ -1,0 +1,68 @@
+{
+  "source_of_truth": {
+    "mission_doc": "docs/MISSION_GRADE_RULES.md",
+    "truth_spine_doc": "docs/ARK_TRUTH_SPINE.md",
+    "prompt_doc": "docs/CODEX_ARK_SYSTEM_PROMPT.md",
+    "redteam_doc": "docs/REDTEAM.md",
+    "tier_doc": "docs/TODO_TIERS.md"
+  },
+  "control_modes": [
+    "NORMAL",
+    "GUARDED",
+    "SAFE"
+  ],
+  "control_loop": [
+    "sense",
+    "compress",
+    "decide",
+    "act",
+    "verify",
+    "remember"
+  ],
+  "truth_pipeline": [
+    "ingest",
+    "archive",
+    "extract",
+    "link",
+    "resolve",
+    "ssot",
+    "derive",
+    "serve"
+  ],
+  "governed_authorities": [
+    "accept_operational_truth",
+    "promote_state",
+    "authorize_external_action",
+    "append_audit_evidence",
+    "switch_control_mode"
+  ],
+  "required_action_controls": [
+    "timeout",
+    "retry_policy",
+    "budget",
+    "failure_mode",
+    "verify_step"
+  ],
+  "required_transition_fields": [
+    "previous_state",
+    "next_state",
+    "reason",
+    "actor",
+    "policy_version",
+    "evidence_refs",
+    "timestamp"
+  ],
+  "deterministic_paths": [
+    "classify",
+    "resolve",
+    "promote",
+    "recover",
+    "verify"
+  ],
+  "fail_safe_defaults": {
+    "missing_dependency": "narrow_behavior",
+    "untrusted_dependency": "safe_mode",
+    "audit_failure": "safe_mode",
+    "signing_failure": "safe_mode"
+  }
+}
