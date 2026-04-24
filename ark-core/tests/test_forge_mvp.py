@@ -89,6 +89,32 @@ def test_orchestrator_uses_injected_context_provider_and_verifier(
     assert verifier.run_calls == 1
 
 
+def test_orchestrator_downgrades_unexpected_errors_to_manual_review(
+    tmp_path: Path,
+) -> None:
+    repo_root = _build_minimal_repo(tmp_path)
+    task = ForgeTask(
+        identifier="mvp-soft-fail",
+        summary="append injected line to readme",
+        scope="S1",
+        todo="T1",
+        target_files=("README.md",),
+    )
+    orchestrator = ForgeOrchestrator(
+        repo_root,
+        apply_accepted=False,
+        client=FakeOllamaClient(enabled=False),
+        context_provider=BrokenContextProvider(),
+        verifier=FakeVerifier(),
+    )
+
+    result = orchestrator.process(task, dry_run=False)
+
+    assert result["status"] == "manual_review"
+    assert "recoverable error" in result["detail"]
+    assert result["metrics"]["error_type"] == "RuntimeError"
+
+
 class FakeOllamaClient:
     """Small test double for the Forge orchestrator."""
 
@@ -158,6 +184,14 @@ class FakeVerifier:
             gate={"ok": True},
             baseline_coverage=100.0,
         )
+
+
+class BrokenContextProvider:
+    def build(self, repo_root: Path, task: ForgeTask, banlist, state):
+        raise RuntimeError("context exploded")
+
+    def enrich_with_plan(self, context, plan):
+        return context
 
 
 def _build_minimal_repo(root: Path) -> Path:
