@@ -123,6 +123,14 @@ class ForgeOrchestrator:
                 event_sink=event_sink,
                 ollama_status=ollama_status,
             )
+        except Exception as exc:
+            return self._blocked_payload(
+                task.identifier,
+                f"Forge hit a recoverable error and moved this task to manual review: {exc}",
+                event_sink=event_sink,
+                ollama_status=ollama_status,
+                error_type=type(exc).__name__,
+            )
         return self._complete_payload(
             task.identifier,
             execution,
@@ -301,12 +309,15 @@ class ForgeOrchestrator:
         event_sink: object | None,
         classification: dict[str, object] | None = None,
         ollama_status: dict[str, object] | None = None,
+        error_type: str | None = None,
     ) -> dict[str, object]:
         metrics = {"task_id": task_id}
         if classification is not None:
             metrics["classification"] = classification
         if ollama_status is not None:
             metrics["ollama"] = ollama_status
+        if error_type is not None:
+            metrics["error_type"] = error_type
         result = {
             "identifier": task_id,
             "status": "manual_review",
