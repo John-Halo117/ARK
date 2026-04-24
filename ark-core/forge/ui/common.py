@@ -87,8 +87,10 @@ class CandidateRecord:
     @property
     def label(self) -> str:
         file_count = len(self.files_touched)
+        short_id = self.identifier[:10]
         return " • ".join(
             [
+                short_id,
                 _candidate_status_label(self.status),
                 _risk_label(self.risk),
                 _count_label(file_count, "file"),
@@ -140,6 +142,9 @@ def render_control_panel(
         f"[{status}]",
         f"AI status: {runtime_summary}",
         f"Right now: {_stage_summary(str(machine.get('stage_label', 'idle')))}",
+        _pipeline_line(
+            str(machine.get("stage", machine.get("stage_label", "idle")))
+        ),
         f"Tool style: {_tool_profile_label(tool_profile)}",
         f"Search style: {mode}",
         f"Check depth: {test_mode}",
@@ -159,7 +164,8 @@ def render_control_panel(
         else:
             lines.extend(
                 [
-                    f"Selected option: {_candidate_status_label(record.status)}",
+                    f"Selected Δ: {record.identifier}",
+                    f"Verification: {_candidate_status_label(record.status)}",
                     f"Confidence: {_risk_label(record.risk)}",
                     f"Size: {_count_label(record.hunk_count, 'change')} across {_count_label(len(record.files_touched), 'file')}",
                     f"What Forge sees: {record.detail or 'Forge is still checking this option.'}",
@@ -201,8 +207,8 @@ def render_status_strip(
     status = str(machine.get("status", "WAITING"))
     stage = _stage_summary(str(machine.get("stage_label", "idle")))
     mode = _mode_label(str(machine.get("mode", "AUTO")))
-    option_text = _count_label(live_count, "live option")
-    history_text = _count_label(history_count, "saved run")
+    option_text = f"Live Δ={live_count}"
+    history_text = f"History={history_count}"
     return (
         f"[{status}] {task}\n"
         f"Now: {stage} | Search: {mode} | {option_text} | {history_text}\n"
@@ -304,11 +310,11 @@ def render_test_panel(
         verify = dict(record.payload.get("metrics", {}).get("verify", {}))
         lines = [
             f"Result: {record.status}",
-            f"Repo tests: {_status_icon(bool(verify.get('tests_ok', record.payload.get('metrics', {}).get('tests', False))))}",
-            f"Added safeguards: {_status_icon(bool(verify.get('synth_ok', False)))}",
-            f"Style checks: {_status_icon(bool(verify.get('lint_ok', False)))}",
-            f"Type checks: {_status_icon(bool(verify.get('types_ok', False)))}",
-            f"Coverage change: {float(verify.get('coverage_delta', record.payload.get('metrics', {}).get('coverage_delta', 0.0))):+.2f}",
+            f"tests_ok: {_status_icon(bool(verify.get('tests_ok', record.payload.get('metrics', {}).get('tests', False))))}",
+            f"synth_ok: {_status_icon(bool(verify.get('synth_ok', False)))}",
+            f"lint_ok: {_status_icon(bool(verify.get('lint_ok', False)))}",
+            f"types_ok: {_status_icon(bool(verify.get('types_ok', False)))}",
+            f"coverage_delta: {float(verify.get('coverage_delta', record.payload.get('metrics', {}).get('coverage_delta', 0.0))):+.2f}",
         ]
         if expanded:
             details = dict(verify.get("details", {}))
@@ -317,11 +323,11 @@ def render_test_panel(
     else:
         lines = [
             f"Result: {record.status}",
-            f"Repo tests: {_status_icon(record.tests_ok)}",
-            f"Added safeguards: {_status_icon(record.synth_ok)}",
-            f"Style checks: {_status_icon(record.lint_ok)}",
-            f"Type checks: {_status_icon(record.types_ok)}",
-            f"Coverage change: {record.coverage_delta:+.2f}",
+            f"tests_ok: {_status_icon(record.tests_ok)}",
+            f"synth_ok: {_status_icon(record.synth_ok)}",
+            f"lint_ok: {_status_icon(record.lint_ok)}",
+            f"types_ok: {_status_icon(record.types_ok)}",
+            f"coverage_delta: {record.coverage_delta:+.2f}",
         ]
         if expanded and record.detail:
             lines.extend(["", record.detail])
@@ -417,7 +423,7 @@ def parse_command(command: str) -> tuple[str, str, list[str]] | None:
 
 def _status_icon(value: bool | None) -> str:
     if value is None:
-        return "waiting"
+        return "pending"
     return "passed" if value else "failed"
 
 

@@ -346,14 +346,24 @@ class ForgeOrchestrator:
 def cli_main() -> int:
     """Entry point used by scripts/ai/orchestrator.py."""
 
+    parser = _build_cli_parser()
+    args = parser.parse_args()
+    _validate_cli_args(parser, args)
+    return _run_cli(args)
+
+
+def _build_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--tasks", type=Path, help="JSON file describing Forge work items"
-    )
+    _add_task_arguments(parser)
+    _add_repo_arguments(parser)
+    _add_ollama_arguments(parser)
+    return parser
+
+
+def _add_task_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--tasks", type=Path, help="JSON file describing Forge work items")
     parser.add_argument("--task", help="Single task summary for one-off runs")
-    parser.add_argument(
-        "--task-id", default="task-1", help="Identifier for --task mode"
-    )
+    parser.add_argument("--task-id", default="task-1", help="Identifier for --task mode")
     parser.add_argument("--scope", default="S1", help="Scope tier for --task mode")
     parser.add_argument("--todo", default="T1", help="Todo tier for --task mode")
     parser.add_argument(
@@ -368,9 +378,10 @@ def cli_main() -> int:
         default=[],
         help="Constraint for --task mode; repeatable",
     )
-    parser.add_argument(
-        "--patch-file", type=Path, help="Patch file to evaluate in --task mode"
-    )
+    parser.add_argument("--patch-file", type=Path, help="Patch file to evaluate in --task mode")
+
+
+def _add_repo_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--repo-root",
         type=Path,
@@ -387,14 +398,15 @@ def cli_main() -> int:
         action="store_true",
         help="Apply accepted deltas back to the repository",
     )
-    parser.add_argument(
-        "--state-file", type=Path, help="Override the persistent Forge state file path"
-    )
+    parser.add_argument("--state-file", type=Path, help="Override the persistent Forge state file path")
     parser.add_argument(
         "--artifacts-dir",
         type=Path,
         help="Override the Forge artifact output directory",
     )
+
+
+def _add_ollama_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--ollama",
         action="store_true",
@@ -414,15 +426,9 @@ def cli_main() -> int:
     parser.add_argument("--executor-model", help="Override the executor model")
     parser.add_argument("--planner-model", help="Override the planner model")
     parser.add_argument("--redteam-model", help="Override the redteam model")
-    parser.add_argument(
-        "--ollama-timeout", type=int, help="Timeout in seconds for Ollama calls"
-    )
-    parser.add_argument(
-        "--ollama-num-ctx", type=int, help="Context window for Ollama calls"
-    )
-    parser.add_argument(
-        "--ollama-temperature", type=float, help="Temperature for Ollama calls"
-    )
+    parser.add_argument("--ollama-timeout", type=int, help="Timeout in seconds for Ollama calls")
+    parser.add_argument("--ollama-num-ctx", type=int, help="Context window for Ollama calls")
+    parser.add_argument("--ollama-temperature", type=float, help="Temperature for Ollama calls")
     parser.add_argument("--ollama-top-p", type=float, help="Top-p for Ollama calls")
     parser.add_argument("--ollama-seed", type=int, help="Base seed for Ollama calls")
     parser.add_argument(
@@ -435,17 +441,20 @@ def cli_main() -> int:
         action="store_true",
         help="Disable model redteam enrichment and keep heuristic redteam only",
     )
-    args = parser.parse_args()
+
+
+def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if args.tasks is None and args.task is None and not args.ollama_check:
         parser.error("provide either --tasks or --task")
     if args.tasks is not None and args.task is not None:
         parser.error("use either --tasks or --task, not both")
+
+
+def _run_cli(args: argparse.Namespace) -> int:
     config = _config_from_args(args)
     client = OllamaClient(config=config)
     if args.ollama_check:
-        status = client.check(refresh=True)
-        print(json.dumps({"ollama": status, "config": client.as_dict()}, indent=2))
-        return 0 if (not config.enabled or status["reachable"]) else 1
+        return _run_ollama_check(client, config)
     orchestrator = ForgeOrchestrator(
         args.repo_root,
         state_path=args.state_file,
@@ -457,6 +466,12 @@ def cli_main() -> int:
     results = [orchestrator.process(task, dry_run=args.dry_run) for task in tasks]
     print(json.dumps(results, indent=2))
     return 0 if all(item["status"] in {"dry_run", "promote"} for item in results) else 1
+
+
+def _run_ollama_check(client: OllamaClient, config: OllamaConfig) -> int:
+    status = client.check(refresh=True)
+    print(json.dumps({"ollama": status, "config": client.as_dict()}, indent=2))
+    return 0 if (not config.enabled or status["reachable"]) else 1
 
 
 def _tasks_from_args(args: argparse.Namespace) -> list[ForgeTask]:
