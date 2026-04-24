@@ -361,9 +361,13 @@ def _build_cli_parser() -> argparse.ArgumentParser:
 
 
 def _add_task_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--tasks", type=Path, help="JSON file describing Forge work items")
+    parser.add_argument(
+        "--tasks", type=Path, help="JSON file describing Forge work items"
+    )
     parser.add_argument("--task", help="Single task summary for one-off runs")
-    parser.add_argument("--task-id", default="task-1", help="Identifier for --task mode")
+    parser.add_argument(
+        "--task-id", default="task-1", help="Identifier for --task mode"
+    )
     parser.add_argument("--scope", default="S1", help="Scope tier for --task mode")
     parser.add_argument("--todo", default="T1", help="Todo tier for --task mode")
     parser.add_argument(
@@ -378,7 +382,9 @@ def _add_task_arguments(parser: argparse.ArgumentParser) -> None:
         default=[],
         help="Constraint for --task mode; repeatable",
     )
-    parser.add_argument("--patch-file", type=Path, help="Patch file to evaluate in --task mode")
+    parser.add_argument(
+        "--patch-file", type=Path, help="Patch file to evaluate in --task mode"
+    )
 
 
 def _add_repo_arguments(parser: argparse.ArgumentParser) -> None:
@@ -398,7 +404,9 @@ def _add_repo_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Apply accepted deltas back to the repository",
     )
-    parser.add_argument("--state-file", type=Path, help="Override the persistent Forge state file path")
+    parser.add_argument(
+        "--state-file", type=Path, help="Override the persistent Forge state file path"
+    )
     parser.add_argument(
         "--artifacts-dir",
         type=Path,
@@ -426,9 +434,15 @@ def _add_ollama_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--executor-model", help="Override the executor model")
     parser.add_argument("--planner-model", help="Override the planner model")
     parser.add_argument("--redteam-model", help="Override the redteam model")
-    parser.add_argument("--ollama-timeout", type=int, help="Timeout in seconds for Ollama calls")
-    parser.add_argument("--ollama-num-ctx", type=int, help="Context window for Ollama calls")
-    parser.add_argument("--ollama-temperature", type=float, help="Temperature for Ollama calls")
+    parser.add_argument(
+        "--ollama-timeout", type=int, help="Timeout in seconds for Ollama calls"
+    )
+    parser.add_argument(
+        "--ollama-num-ctx", type=int, help="Context window for Ollama calls"
+    )
+    parser.add_argument(
+        "--ollama-temperature", type=float, help="Temperature for Ollama calls"
+    )
     parser.add_argument("--ollama-top-p", type=float, help="Top-p for Ollama calls")
     parser.add_argument("--ollama-seed", type=int, help="Base seed for Ollama calls")
     parser.add_argument(
@@ -443,7 +457,9 @@ def _add_ollama_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _validate_cli_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def _validate_cli_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
     if args.tasks is None and args.task is None and not args.ollama_check:
         parser.error("provide either --tasks or --task")
     if args.tasks is not None and args.task is not None:

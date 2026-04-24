@@ -142,9 +142,7 @@ def render_control_panel(
         f"[{status}]",
         f"AI status: {runtime_summary}",
         f"Right now: {_stage_summary(str(machine.get('stage_label', 'idle')))}",
-        _pipeline_line(
-            str(machine.get("stage", machine.get("stage_label", "idle")))
-        ),
+        _pipeline_line(str(machine.get("stage", machine.get("stage_label", "idle")))),
         f"Tool style: {_tool_profile_label(tool_profile)}",
         f"Search style: {mode}",
         f"Check depth: {test_mode}",
