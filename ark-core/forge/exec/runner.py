@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+UNSAFE_COMMAND_MESSAGE = "command rejected by validation"
 
 
 def project_python(tool_root: Path) -> str:
@@ -16,18 +19,55 @@ def project_python(tool_root: Path) -> str:
     return venv_python.as_posix() if venv_python.exists() else sys.executable
 
 
+def validated_command(command: list[str] | tuple[str, ...]) -> list[str]:
+    """Validate every subprocess argument before execution."""
+
+    validate_docker_arg = _load_validate_docker_arg()
+    return [validate_docker_arg(str(arg)) for arg in command]
+
+
+def _load_validate_docker_arg():
+    try:
+        from ark.security import validate_docker_arg
+
+        return validate_docker_arg
+    except ModuleNotFoundError:
+        security_path = Path(__file__).resolve().parents[3] / "ark" / "security.py"
+        spec = importlib.util.spec_from_file_location("ark_security", security_path)
+        if spec is None or spec.loader is None:
+            raise
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.validate_docker_arg
+
+
 def run_command(command: list[str], cwd: Path, timeout: int = 900) -> dict[str, object]:
     """Run a command with captured output."""
 
+    try:
+        safe_command = validated_command(command)
+    except ValueError:
+        return {
+            "ok": False,
+            "returncode": -2,
+            "stdout": "",
+            "stderr": UNSAFE_COMMAND_MESSAGE,
+            "command": [],
+        }
     result = subprocess.run(
-        command, cwd=cwd, check=False, capture_output=True, text=True, timeout=timeout
+        safe_command,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
     return {
         "ok": result.returncode == 0,
         "returncode": result.returncode,
         "stdout": result.stdout,
         "stderr": result.stderr,
-        "command": command,
+        "command": safe_command,
     }
 
 

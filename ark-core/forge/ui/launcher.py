@@ -35,7 +35,7 @@ def main() -> int:
             args,
             repo_root,
             runtime_summary,
-            f"Forge hit a recoverable error and moved on: {exc}",
+            f"Forge hit a recoverable error and moved on ({type(exc).__name__}).",
         )
 
 

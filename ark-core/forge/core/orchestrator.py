@@ -20,6 +20,11 @@ from ..verify.adapters import PythonVerifierAdapter, VerifierAdapter
 from .loop import run_task
 
 ENGINE_ROOT = Path(__file__).resolve().parents[2]
+PUBLIC_APPLY_ERROR = "accepted delta could not be applied cleanly"
+PUBLIC_OLLAMA_ERROR = "Forge runtime could not satisfy this task"
+PUBLIC_RECOVERABLE_ERROR = (
+    "Forge hit a recoverable error and moved this task to manual review."
+)
 
 
 def load_tasks(path: Path) -> list[ForgeTask]:
@@ -119,14 +124,15 @@ class ForgeOrchestrator:
         except OllamaError as exc:
             return self._blocked_payload(
                 task.identifier,
-                str(exc),
+                PUBLIC_OLLAMA_ERROR,
                 event_sink=event_sink,
                 ollama_status=ollama_status,
+                error_type=type(exc).__name__,
             )
         except Exception as exc:
             return self._blocked_payload(
                 task.identifier,
-                f"Forge hit a recoverable error and moved this task to manual review: {exc}",
+                PUBLIC_RECOVERABLE_ERROR,
                 event_sink=event_sink,
                 ollama_status=ollama_status,
                 error_type=type(exc).__name__,
@@ -148,7 +154,8 @@ class ForgeOrchestrator:
             apply_unified_diff(self.repo_root, patch)
         except ValueError as exc:
             result["status"] = "manual_review"
-            result["detail"] = f"accepted delta could not be applied to the repo: {exc}"
+            result["detail"] = PUBLIC_APPLY_ERROR
+            result.setdefault("metrics", {})["error_type"] = type(exc).__name__
             return False, result
         self.state.lkg_id = resolve_lkg_id(self.repo_root)
         result["lkg_id"] = self.state.lkg_id
@@ -195,8 +202,8 @@ class ForgeOrchestrator:
                 task_id=task.identifier,
             )
             return None, self.client.require_ready()
-        except OllamaError as exc:
-            return str(exc), ollama_status
+        except OllamaError:
+            return PUBLIC_OLLAMA_ERROR, ollama_status
 
     def _execute_task(
         self,
@@ -524,8 +531,12 @@ def _config_from_args(args: argparse.Namespace) -> OllamaConfig:
         executor_model=args.executor_model or env_config.executor_model,
         planner_model=args.planner_model or env_config.planner_model,
         redteam_model=args.redteam_model or env_config.redteam_model,
-        timeout_s=args.ollama_timeout or env_config.timeout_s,
-        num_ctx=args.ollama_num_ctx or env_config.num_ctx,
+        timeout_s=args.ollama_timeout
+        if args.ollama_timeout is not None
+        else env_config.timeout_s,
+        num_ctx=args.ollama_num_ctx
+        if args.ollama_num_ctx is not None
+        else env_config.num_ctx,
         temperature=args.ollama_temperature
         if args.ollama_temperature is not None
         else env_config.temperature,

@@ -12,6 +12,7 @@ from ..models.discovery import (
     compact_runtime_summary,
     detect_ollama_endpoint,
 )
+from ..exec.runner import validated_command
 from .config import DEFAULT_RUNTIME_BOOTSTRAP_CONFIG, RuntimeBootstrapConfig
 
 
@@ -202,8 +203,12 @@ def _launch_background_command(command: tuple[str, ...]) -> str | None:
     if not command or shutil.which(command[0]) is None:
         return None
     try:
+        safe_command = validated_command(command)
+    except ValueError:
+        return None
+    try:
         subprocess.Popen(
-            command,
+            safe_command,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -211,4 +216,4 @@ def _launch_background_command(command: tuple[str, ...]) -> str | None:
         )
     except OSError:
         return None
-    return "Started: " + " ".join(command)
+    return "Started: " + " ".join(safe_command)

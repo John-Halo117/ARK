@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .runner import validated_command
+
 IGNORE_PARTS = {".git", ".venv", ".pytest_cache", ".ruff_cache", "__pycache__"}
 HASH_SUFFIXES = {".py", ".json", ".md", ".sh", ".txt", ".toml", ".yml", ".yaml"}
 
@@ -30,8 +32,12 @@ def resolve_lkg_id(repo_root: Path) -> str:
 
     git_path = shutil.which("git")
     if git_path is not None:
+        try:
+            command = validated_command([git_path, "rev-parse", "HEAD"])
+        except ValueError:
+            return _tree_digest(repo_root)
         result = subprocess.run(
-            [git_path, "rev-parse", "HEAD"],
+            command,
             cwd=repo_root,
             check=False,
             capture_output=True,

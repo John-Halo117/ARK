@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 from urllib import request
 
+from ..exec.runner import validated_command
+
 
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
@@ -99,14 +101,15 @@ def _wsl_host_candidates() -> list[str]:
 
 def _default_gateway() -> str | None:
     try:
+        command = validated_command(["ip", "route"])
         result = subprocess.run(
-            ["ip", "route"],
+            command,
             check=False,
             capture_output=True,
             text=True,
             timeout=5,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, ValueError, subprocess.SubprocessError):
         return None
     for line in result.stdout.splitlines():
         if line.startswith("default via "):

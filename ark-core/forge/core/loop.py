@@ -256,7 +256,9 @@ def _finalize_execution(
         ),
         None,
     )
-    _remember_evaluations(state, banlist, candidates, evaluations)
+    _remember_evaluations(
+        state, banlist, candidates, evaluations, risk_threshold=risk_threshold
+    )
     result = _build_result(task, state, post_phi, mode, winner, ranked, repeated)
     accepted_candidate = next(
         (
@@ -276,10 +278,21 @@ def _finalize_execution(
 
 
 def _remember_evaluations(
-    state: ForgeState, banlist, candidates, evaluations: list[EvaluationResult]
+    state: ForgeState,
+    banlist,
+    candidates,
+    evaluations: list[EvaluationResult],
+    *,
+    risk_threshold: float,
 ) -> None:
     for candidate, evaluation in zip(candidates, evaluations, strict=True):
-        register_failure(evaluation, candidate, banlist, state.attempt)
+        register_failure(
+            evaluation,
+            candidate,
+            banlist,
+            state.attempt,
+            risk_threshold=risk_threshold,
+        )
     state.attempt += 1
     state.evaluations.extend(evaluations)
     state.evaluations = state.evaluations[-16:]

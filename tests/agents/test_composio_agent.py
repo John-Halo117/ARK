@@ -39,29 +39,35 @@ class TestComposioBridge:
 
     @pytest.mark.asyncio
     async def test_send_email_no_api_key(self):
-        result = await self.bridge.send_email({
-            "to": "a@b.com",
-            "subject": "hi",
-            "body": "hello",
-        })
+        result = await self.bridge.send_email(
+            {
+                "to": "a@b.com",
+                "subject": "hi",
+                "body": "hello",
+            }
+        )
         assert result["status"] == "error"
         assert result["error_code"] == "LOCAL_TOOL_MOVED_TO_FORGE"
 
     @pytest.mark.asyncio
     async def test_send_email_ignores_composio_api_key(self):
         self.bridge.composio_api_key = "test-key"
-        result = await self.bridge.send_email({
-            "to": "a@b.com",
-            "subject": "hi",
-            "body": "hello",
-        })
+        result = await self.bridge.send_email(
+            {
+                "to": "a@b.com",
+                "subject": "hi",
+                "body": "hello",
+            }
+        )
         assert result["status"] == "error"
 
     # ---- github_action ----
 
     @pytest.mark.asyncio
     async def test_github_action(self):
-        result = await self.bridge.github_action({"action": "create_issue", "repo": "org/repo"})
+        result = await self.bridge.github_action(
+            {"action": "create_issue", "repo": "org/repo"}
+        )
         assert result["capability"] == "external.github"
         assert result["status"] == "error"
 
@@ -69,7 +75,9 @@ class TestComposioBridge:
 
     @pytest.mark.asyncio
     async def test_slack_message(self):
-        result = await self.bridge.slack_message({"channel": "#general", "message": "hello"})
+        result = await self.bridge.slack_message(
+            {"channel": "#general", "message": "hello"}
+        )
         assert result["capability"] == "external.slack"
         assert result["status"] == "error"
 
@@ -77,7 +85,9 @@ class TestComposioBridge:
 
     @pytest.mark.asyncio
     async def test_notion_action(self):
-        result = await self.bridge.notion_action({"action": "create_page", "database": "db-1"})
+        result = await self.bridge.notion_action(
+            {"action": "create_page", "database": "db-1"}
+        )
         assert result["capability"] == "external.notion"
         assert result["status"] == "error"
 
@@ -98,6 +108,29 @@ class TestComposioBridge:
 
     @pytest.mark.asyncio
     async def test_local_tool_profile_dispatch(self):
-        result = await self.bridge.handle_capability("external.maps.distance", {"capability": "external.maps.distance"})
-        assert result["status"] == "error"
-        assert result["error_code"] == "LOCAL_TOOL_MOVED_TO_FORGE"
+        params = {"lat1": 0, "lon1": 0, "lat2": 0, "lon2": 1}
+        result = await self.bridge.handle_capability("external.maps.distance", params)
+        assert result["capability"] == "external.maps.distance"
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.geo.distance", "args": params}
+
+    @pytest.mark.asyncio
+    async def test_web_fetch_plans_tool(self):
+        params = {"url": "https://example.com"}
+        result = await self.bridge.handle_capability("external.web.fetch", params)
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.data.fetch", "args": params}
+
+    @pytest.mark.asyncio
+    async def test_web_search_plans_tool(self):
+        params = {"query": "local maps"}
+        result = await self.bridge.handle_capability("external.web.search", params)
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.data.fetch", "args": params}
+
+    @pytest.mark.asyncio
+    async def test_geocode_plans_tool(self):
+        params = {"address": "Seattle, WA"}
+        result = await self.bridge.handle_capability("external.maps.geocode", params)
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.geo.geocode", "args": params}

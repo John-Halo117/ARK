@@ -107,7 +107,7 @@ class OllamaClient:
             build_plan_prompt(context),
             format_json=True,
         )
-        return _extract_json(response)
+        return _extract_json_response(response)
 
     def critique(
         self, context: ContextBundle, delta: str, mode: str
@@ -123,7 +123,7 @@ class OllamaClient:
             seed=seed,
             format_json=True,
         )
-        return _extract_json(response)
+        return _extract_json_response(response)
 
     def check(self, *, refresh: bool = False) -> dict[str, object]:
         """Probe the local Ollama runtime and cache the result."""
@@ -252,6 +252,13 @@ def _extract_json(text: str) -> dict[str, object]:
     if start < 0 or end < 0 or end < start:
         raise ValueError("model response did not contain JSON")
     return json.loads(cleaned[start : end + 1])
+
+
+def _extract_json_response(text: str) -> dict[str, object]:
+    try:
+        return _extract_json(text)
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise OllamaError("Ollama returned invalid JSON") from exc
 
 
 def _tags_endpoint(base_url: str) -> str:

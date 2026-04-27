@@ -27,15 +27,15 @@ def propose_deltas(
     for seed in range(bounded_candidates(mode)):
         try:
             patch = getattr(client, "diff")(context, seed=seed)
-        except (RuntimeError, ValueError) as exc:
-            _emit_candidate_error(event_sink, seed, str(exc))
+        except (RuntimeError, ValueError):
+            _emit_candidate_error(event_sink, seed, "candidate generation failed")
             continue
         if not patch:
             continue
         try:
             candidate = _candidate_from_patch(patch, "ollama_executor", seed)
-        except ValueError as exc:
-            _emit_candidate_error(event_sink, seed, str(exc))
+        except ValueError:
+            _emit_candidate_error(event_sink, seed, "candidate patch was invalid")
             continue
         proposals.append(candidate)
         _emit_candidate(event_sink, candidate)

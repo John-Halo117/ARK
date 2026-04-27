@@ -95,5 +95,22 @@ def parse_capability_from_subject(subject: str) -> str:
 
 def parse_service_from_queue_depth(subject: str) -> str:
     """Extract service name from ``ark.system.queue_depth.<service>``."""
+    return parse_service_from_system_subject(subject)
+
+
+def parse_service_from_system_subject(subject: str, expected_signal: str | None = None) -> str:
+    """Extract service from ``ark.system.<signal>.<service>`` with validation.
+
+    Returns ``"unknown"`` when structure is invalid or when ``expected_signal``
+    is provided and does not match the signal token.
+    """
     parts = subject.split(".")
-    return parts[-1] if len(parts) > 3 else "unknown"
+    if len(parts) != 4 or parts[0] != "ark" or parts[1] != "system":
+        return "unknown"
+    signal = parts[2]
+    service = parts[3]
+    if not service:
+        return "unknown"
+    if expected_signal is not None and signal != expected_signal:
+        return "unknown"
+    return service

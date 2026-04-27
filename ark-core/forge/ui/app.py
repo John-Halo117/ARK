@@ -514,8 +514,11 @@ def launch(
                 except (
                     Exception
                 ) as exc:  # pragma: no cover - safety net for interactive mode
-                    self.call_from_thread(self._set_stage, "BLOCKED", str(exc))
-                    self.call_from_thread(self._log, f"Run failed: {exc}")
+                    self.call_from_thread(self._set_stage, "BLOCKED", "run failed")
+                    self.call_from_thread(
+                        self._log,
+                        f"Run failed; moved to manual review ({type(exc).__name__}).",
+                    )
                     break
                 self.call_from_thread(self._record_result, result)
                 if not request.auto_loop or result["status"] in {

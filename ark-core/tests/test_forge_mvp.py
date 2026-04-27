@@ -112,6 +112,7 @@ def test_orchestrator_downgrades_unexpected_errors_to_manual_review(
 
     assert result["status"] == "manual_review"
     assert "recoverable error" in result["detail"]
+    assert "context exploded" not in result["detail"]
     assert result["metrics"]["error_type"] == "RuntimeError"
 
 
