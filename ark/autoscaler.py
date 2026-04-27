@@ -93,42 +93,12 @@ class Autoscaler:
     
     async def monitor_demand(self):
         """Listen for demand signals"""
-<<<<<<< ours
-        try:
-            sub = await self.nc.subscribe(SYSTEM_QUEUE_DEPTH_SUBSCRIBE)
-            logger.info("Subscribed to demand signals")
-            
-            async for msg in sub.messages:
-                try:
-                    service = parse_service_from_queue_depth(msg.subject)
-                    
-                    event = self.contracts.materialize_payload(
-                        "runtime.autoscaler.queue_signal",
-                        json.loads(msg.data.decode()),
-                    )
-                    depth = event.get('depth', 0)
-                    
-                    self.reducer_engine.apply(
-                        "autoscaler.demand",
-                        {"service": service, "depth": depth},
-                    )
-                    
-                    # Check if scaling needed
-                    await self.check_scaling(service)
-                
-                except Exception as e:
-                    logger.error(f"Error processing demand signal: {e}")
-        
-        except NATSError as e:
-            logger.error(f"Subscription error: {e}")
-=======
         await self._monitor_system_signal(
             pattern=SYSTEM_QUEUE_DEPTH_SUBSCRIBE,
             signal_name="queue_depth",
             callback=self._on_queue_depth_signal,
             subscription_label="demand signals",
         )
->>>>>>> theirs
     
     async def monitor_latency(self):
         """Listen for latency signals"""
@@ -147,21 +117,6 @@ class Autoscaler:
 
             async for msg in sub.messages:
                 try:
-<<<<<<< ours
-                    service = parse_service_from_queue_depth(msg.subject)
-                    
-                    event = self.contracts.materialize_payload(
-                        "runtime.autoscaler.latency_signal",
-                        json.loads(msg.data.decode()),
-                    )
-                    latency = event.get('latency_ms', 0)
-                    
-                    self.reducer_engine.apply(
-                        "autoscaler.latency",
-                        {"service": service, "latency_ms": latency},
-                    )
-                
-=======
                     service = parse_service_from_system_subject(msg.subject, expected_signal=signal_name)
                     if service == "unknown":
                         logger.warning("Ignoring malformed subject: %s", msg.subject)
@@ -173,7 +128,6 @@ class Autoscaler:
                     await callback(service, event)
                 except json.JSONDecodeError:
                     logger.warning("Ignoring invalid JSON payload for subject: %s", msg.subject)
->>>>>>> theirs
                 except Exception as e:
                     logger.error("Error processing %s signal: %s", signal_name, e)
 

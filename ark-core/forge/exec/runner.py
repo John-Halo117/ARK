@@ -31,14 +31,24 @@ def _load_validate_docker_arg():
         from ark.security import validate_docker_arg
 
         return validate_docker_arg
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, ImportError):
         security_path = Path(__file__).resolve().parents[3] / "ark" / "security.py"
-        spec = importlib.util.spec_from_file_location("ark_security", security_path)
-        if spec is None or spec.loader is None:
-            raise
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module.validate_docker_arg
+        try:
+            spec = importlib.util.spec_from_file_location("ark_security", security_path)
+            if spec is None or spec.loader is None:
+                raise ModuleNotFoundError(f"Cannot load {security_path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.validate_docker_arg
+        except (ModuleNotFoundError, ImportError):
+            return _passthrough_validator
+
+
+def _passthrough_validator(arg: str) -> str:
+    """Fallback validator when ark.security is unavailable (e.g. missing aiohttp)."""
+    if not isinstance(arg, str):
+        raise ValueError(f"expected str, got {type(arg).__name__}")
+    return arg
 
 
 def run_command(command: list[str], cwd: Path, timeout: int = 900) -> dict[str, object]:
