@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tomllib
 
+from ..exec.runner import UNSAFE_COMMAND_MESSAGE, validated_command
 from .config import DEFAULT_RUNTIME_CAPABILITY_CONFIG, RuntimeCapabilityConfig
 
 
@@ -120,11 +121,15 @@ def _run_command(command: tuple[str, ...], *, timeout_s: int) -> _CommandResult:
             False, f"{command[0] if command else 'command'} not found"
         )
     try:
+        safe_command = validated_command(command)
+    except ValueError:
+        return _CommandResult(False, UNSAFE_COMMAND_MESSAGE)
+    try:
         result = subprocess.run(
-            command, check=False, capture_output=True, text=True, timeout=timeout_s
+            safe_command, check=False, capture_output=True, text=True, timeout=timeout_s
         )
-    except (OSError, subprocess.SubprocessError) as exc:
-        return _CommandResult(False, str(exc))
+    except (OSError, subprocess.SubprocessError):
+        return _CommandResult(False, "command execution failed")
     output = (result.stdout or result.stderr).strip().splitlines()
     detail = output[0].strip() if output else f"exit {result.returncode}"
     return _CommandResult(result.returncode == 0, detail)

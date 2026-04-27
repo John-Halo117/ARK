@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ..runtime.guards import clamp
 from ..types import CandidateDelta, ContextBundle, CritiqueSummary
 
@@ -53,11 +55,8 @@ def _attack_score(name: str, patch: str) -> float:
             0.2 if any(token in lower for token in ("[0]", "index(", "split(")) else 0.0
         )
     if name == "perf":
-        return clamp(
-            0.3
-            if "while true" in lower or "for " in lower and " for " in lower
-            else 0.0
-        )
+        for_count = len(re.findall(r"\bfor\b", lower))
+        return clamp(0.3 if "while true" in lower or for_count >= 2 else 0.0)
     if name == "security":
         return clamp(
             0.9

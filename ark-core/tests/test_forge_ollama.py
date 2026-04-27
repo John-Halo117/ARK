@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from forge.core.orchestrator import (
     ForgeOrchestrator,
     _config_from_args,
@@ -13,9 +15,9 @@ from forge.core.orchestrator import (
 )
 from forge.context.build import build_context
 from forge.memory.ban import BanList
-from forge.models.ollama_client import OllamaClient, OllamaConfig
+from forge.models.ollama_client import OllamaClient, OllamaConfig, OllamaError
 from forge.types import ForgeState, ForgeTask
-from forge.verify.redteam import attack_ensemble
+from forge.verify.redteam import _attack_score, attack_ensemble
 
 
 def test_ollama_client_extracts_diff_from_chatty_response(
@@ -87,6 +89,24 @@ def test_attack_ensemble_merges_model_findings() -> None:
     assert critique.attackers["security"] == 0.75
 
 
+def test_perf_attack_score_ignores_single_bounded_for_loop() -> None:
+    patch = "diff --git a/a.py b/a.py\n+for item in items:\n+    print(item)\n"
+
+    assert _attack_score("perf", patch) == 0.0
+
+
+def test_perf_attack_score_detects_repeated_for_tokens_and_while_true() -> None:
+    nested_patch = (
+        "diff --git a/a.py b/a.py\n"
+        "+for row in rows:\n"
+        "+    for item in row:\n"
+        "+        print(item)\n"
+    )
+
+    assert _attack_score("perf", nested_patch) == 0.3
+    assert _attack_score("perf", "+while true:\n+    pass\n") == 0.3
+
+
 def test_inline_task_and_ollama_config_from_args(tmp_path: Path) -> None:
     patch_file = tmp_path / "proposal.patch"
     patch_file.write_text(
@@ -129,6 +149,59 @@ def test_inline_task_and_ollama_config_from_args(tmp_path: Path) -> None:
     assert config.num_ctx == 8192
     assert config.planner_enabled is False
     assert config.redteam_enabled is False
+
+
+def test_ollama_config_keeps_explicit_zero_numeric_args() -> None:
+    args = SimpleNamespace(
+        tasks=None,
+        task="fix inline issue",
+        task_id="inline-1",
+        scope="S1",
+        todo="T1",
+        target_file=[],
+        constraint=[],
+        patch_file=None,
+        ollama=False,
+        ollama_required=False,
+        ollama_url=None,
+        executor_model=None,
+        planner_model=None,
+        redteam_model=None,
+        ollama_timeout=0,
+        ollama_num_ctx=0,
+        ollama_temperature=None,
+        ollama_top_p=None,
+        ollama_seed=None,
+        ollama_no_planner=False,
+        ollama_no_redteam=False,
+    )
+
+    config = _config_from_args(args)
+
+    assert config.timeout_s == 0
+    assert config.num_ctx == 0
+
+
+def test_ollama_plan_invalid_json_raises_ollama_error(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    context = _build_context(tmp_path)
+    client = OllamaClient(config=OllamaConfig(enabled=True, planner_enabled=True))
+    monkeypatch.setattr(client, "_call", lambda *args, **kwargs: "no json here")
+
+    with pytest.raises(OllamaError, match="invalid JSON"):
+        client.plan(context)
+
+
+def test_ollama_critique_invalid_json_raises_ollama_error(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    context = _build_context(tmp_path)
+    client = OllamaClient(config=OllamaConfig(enabled=True, redteam_enabled=True))
+    monkeypatch.setattr(client, "_call", lambda *args, **kwargs: "{bad json")
+
+    with pytest.raises(OllamaError, match="invalid JSON"):
+        client.critique(context, "diff --git a/a b/a\n", "security")
 
 
 def test_invalid_ollama_patch_returns_repair_instead_of_crashing(
@@ -220,3 +293,15 @@ def _build_minimal_repo(root: Path) -> Path:
         encoding="utf-8",
     )
     return root
+
+
+def _build_context(root: Path):
+    repo_root = _build_minimal_repo(root)
+    task = ForgeTask(
+        identifier="ollama-json",
+        summary="plan a change",
+        scope="S1",
+        todo="T1",
+        target_files=("README.md",),
+    )
+    return build_context(repo_root, task, BanList(), ForgeState(lkg_id="lkg"))

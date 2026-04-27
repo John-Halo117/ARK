@@ -44,15 +44,15 @@ class TestOpenCodeAgent:
 
         assert result["agent"] == "opencode"
         assert result["capability"] == "code.analyze"
-        assert result["language"] == "python"
-        assert result["analysis"]["lines"] == 3
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.code.analyze", "args": params}
         assert "timestamp" in result
 
     @pytest.mark.asyncio
     async def test_analyze_code_defaults(self):
         result = await self.agent.analyze_code({})
-        assert result["language"] == "python"
-        assert result["analysis"]["lines"] == 1  # empty string split gives ['']
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.code.analyze", "args": {}}
 
     # ---- transform_code ----
 
@@ -62,13 +62,14 @@ class TestOpenCodeAgent:
         result = await self.agent.transform_code(params)
 
         assert result["capability"] == "code.transform"
-        assert result["type"] == "optimize"
-        assert result["output"] == "x = 1"
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.code.transform", "args": params}
 
     @pytest.mark.asyncio
     async def test_transform_code_defaults(self):
         result = await self.agent.transform_code({})
-        assert result["type"] == "refactor"
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.code.transform", "args": {}}
 
     # ---- generate_code ----
 
@@ -78,23 +79,25 @@ class TestOpenCodeAgent:
         result = await self.agent.generate_code(params)
 
         assert result["capability"] == "code.generate"
-        assert result["language"] == "rust"
-        assert result["spec"] == "hello world function"
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.code.generate", "args": params}
 
     # ---- plan ----
 
     @pytest.mark.asyncio
     async def test_plan(self):
-        result = await self.agent.plan({"goal": "deploy service"})
+        params = {"goal": "deploy service"}
+        result = await self.agent.plan(params)
         assert result["capability"] == "reasoning.plan"
-        assert result["goal"] == "deploy service"
-        assert "steps" in result["plan"]
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.reasoning.plan", "args": params}
 
     # ---- decompose ----
 
     @pytest.mark.asyncio
     async def test_decompose(self):
-        result = await self.agent.decompose({"problem": "scale db"})
+        params = {"problem": "scale db"}
+        result = await self.agent.decompose(params)
         assert result["capability"] == "reasoning.decompose"
-        assert result["problem"] == "scale db"
-        assert isinstance(result["subtasks"], list)
+        step = result["plans"][0]["steps"][0]
+        assert step == {"tool": "tool.reasoning.decompose", "args": params}

@@ -97,16 +97,16 @@ def _apply_candidate_patch(
             candidate_id=candidate.identifier,
         )
         apply_unified_diff(sandbox_root, candidate.patch)
-    except ValueError as exc:
+    except ValueError:
         _emit(
             event_sink,
             "candidate_invalid",
-            f"invalid patch for {candidate.identifier}: {exc}",
+            f"invalid patch for {candidate.identifier}",
             candidate_id=candidate.identifier,
             risk=1.0,
-            detail=str(exc),
+            detail="candidate patch was invalid",
         )
-        return _invalid_patch(candidate.identifier, str(exc))
+        return _invalid_patch(candidate.identifier, "candidate patch was invalid")
     return None
 
 
@@ -250,11 +250,20 @@ def _emit_candidate_done(
 
 
 def register_failure(
-    result: EvaluationResult, candidate: CandidateDelta, banlist: BanList, step: int
+    result: EvaluationResult,
+    candidate: CandidateDelta,
+    banlist: BanList,
+    step: int,
+    *,
+    risk_threshold: float = TAU,
 ) -> None:
     """Remember failed candidates with decay-aware signatures."""
 
-    if result.blocked or result.verify.passed() and result.critique.risk <= TAU:
+    if (
+        result.blocked
+        or result.verify.passed()
+        and result.critique.risk <= risk_threshold
+    ):
         return
     banlist.add(
         failure_record(candidate.patch, candidate.strategy, "candidate_failure"), step

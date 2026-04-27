@@ -221,3 +221,101 @@ def test_browser_apply_safe_revert_hides_patch_error_details(
     result = state.apply_safe_revert()
 
     assert result == {"ok": False, "error": PATCH_REVERT_ERROR}
+
+
+def test_browser_run_failure_hides_exception_details(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        browser,
+        "detect_ollama_endpoint",
+        lambda preferred_url=None, timeout_s=5: (
+            "http://127.0.0.1:11434/api/generate",
+            ["qwen3-coder:30b"],
+        ),
+    )
+    monkeypatch.setattr(
+        browser, "choose_model", lambda models, preferred=None: "qwen3-coder:30b"
+    )
+    monkeypatch.setattr(browser, "load_history_records", lambda artifacts_dir: [])
+    secret = "secret /tmp/internal-path"
+    state = browser.BrowserState(Path(tmp_path))
+    request = _run_request(tmp_path)
+    monkeypatch.setattr(
+        state, "_build_client", lambda item: (object(), "runtime ready")
+    )
+
+    def fail_process(item, client):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(state, "_process_request", fail_process)
+
+    assert state._run_attempt(request, 1) is None
+    snapshot = state.snapshot()
+
+    assert state.controller.machine_state["stage_label"] == "run failed"
+    assert secret not in str(state.controller.machine_state)
+    assert secret not in str(snapshot)
+    assert secret not in "\n".join(snapshot["logs"])
+
+
+def test_legacy_browser_run_failure_hides_exception_details(
+    monkeypatch: object, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        browser,
+        "detect_ollama_endpoint",
+        lambda preferred_url=None, timeout_s=5: (
+            "http://127.0.0.1:11434/api/generate",
+            ["qwen3-coder:30b"],
+        ),
+    )
+    monkeypatch.setattr(
+        browser, "choose_model", lambda models, preferred=None: "qwen3-coder:30b"
+    )
+    monkeypatch.setattr(browser, "load_history_records", lambda artifacts_dir: [])
+    monkeypatch.setattr(
+        browser,
+        "_build_client_from_request",
+        lambda request: (object(), "runtime ready"),
+    )
+    secret = "secret /tmp/legacy-path"
+
+    class BrokenOrchestrator:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def process(self, *args, **kwargs):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(browser, "ForgeOrchestrator", BrokenOrchestrator)
+    state = browser._LegacyBrowserState(Path(tmp_path))
+
+    state._run_worker(_run_request(tmp_path))
+    snapshot = state.snapshot()
+
+    assert state.machine_state["stage_label"] == "run failed"
+    assert secret not in str(state.machine_state)
+    assert secret not in str(snapshot)
+    assert secret not in "\n".join(snapshot["logs"])
+
+
+def _run_request(repo_root: Path) -> browser.RunRequest:
+    return browser.RunRequest(
+        task_text="fix a thing",
+        files=(),
+        repo_root=repo_root,
+        apply_accepted=False,
+        planner_enabled=False,
+        redteam_enabled=False,
+        debug_enabled=False,
+        auto_loop=False,
+        mode_override="AUTO",
+        risk_threshold=0.35,
+        context_level=0,
+        test_mode="default",
+        timeout_s=30,
+        num_ctx=2048,
+        preferred_model=None,
+        preferred_url=None,
+    )

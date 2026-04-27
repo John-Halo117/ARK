@@ -542,8 +542,8 @@ class ForgeOperatorController:
             return False, "missing selection"
         try:
             apply_unified_diff(self.repo_root, patch)
-        except ValueError as exc:
-            self.log(f"Could not apply patch: {exc}")
+        except ValueError:
+            self.log("Could not apply patch cleanly.")
             return False, PATCH_APPLY_ERROR
         self.remember_applied_patch(
             label=label,
@@ -589,8 +589,8 @@ class ForgeOperatorController:
         latest = self.applied_history[-1]
         try:
             apply_unified_diff(self.repo_root, latest.revert_patch)
-        except ValueError as exc:
-            self.log(f"Could not revert {latest.label}: {exc}")
+        except ValueError:
+            self.log(f"Could not revert {latest.label} cleanly.")
             return False, PATCH_REVERT_ERROR
         self.applied_history.pop()
         self.machine_state["status"] = "WAITING"

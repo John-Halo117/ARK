@@ -32,7 +32,7 @@ from ark.gsb import GlobalStateBus, build_global_state_bus
 from ark.subjects import (
     SYSTEM_QUEUE_DEPTH_SUBSCRIBE, SYSTEM_LATENCY_SUBSCRIBE,
     SYSTEM_ASHI, SPAWN_CONFIRMED,
-    parse_service_from_queue_depth,
+    parse_service_from_system_subject,
 )
 from ark.policy_engine import load_policy_set
 from ark.reducers import AutoscalerViewReducer, ReducerEngine
@@ -93,6 +93,7 @@ class Autoscaler:
     
     async def monitor_demand(self):
         """Listen for demand signals"""
+<<<<<<< ours
         try:
             sub = await self.nc.subscribe(SYSTEM_QUEUE_DEPTH_SUBSCRIBE)
             logger.info("Subscribed to demand signals")
@@ -120,14 +121,33 @@ class Autoscaler:
         
         except NATSError as e:
             logger.error(f"Subscription error: {e}")
+=======
+        await self._monitor_system_signal(
+            pattern=SYSTEM_QUEUE_DEPTH_SUBSCRIBE,
+            signal_name="queue_depth",
+            callback=self._on_queue_depth_signal,
+            subscription_label="demand signals",
+        )
+>>>>>>> theirs
     
     async def monitor_latency(self):
         """Listen for latency signals"""
+        await self._monitor_system_signal(
+            pattern=SYSTEM_LATENCY_SUBSCRIBE,
+            signal_name="latency",
+            callback=self._on_latency_signal,
+            subscription_label="latency signals",
+        )
+
+    async def _monitor_system_signal(self, pattern: str, signal_name: str, callback, subscription_label: str):
+        """Shared pub/sub monitor for ark.system.* subjects."""
         try:
-            sub = await self.nc.subscribe(SYSTEM_LATENCY_SUBSCRIBE)
-            
+            sub = await self.nc.subscribe(pattern)
+            logger.info("Subscribed to %s", subscription_label)
+
             async for msg in sub.messages:
                 try:
+<<<<<<< ours
                     service = parse_service_from_queue_depth(msg.subject)
                     
                     event = self.contracts.materialize_payload(
@@ -141,11 +161,41 @@ class Autoscaler:
                         {"service": service, "latency_ms": latency},
                     )
                 
+=======
+                    service = parse_service_from_system_subject(msg.subject, expected_signal=signal_name)
+                    if service == "unknown":
+                        logger.warning("Ignoring malformed subject: %s", msg.subject)
+                        continue
+                    event = json.loads(msg.data.decode())
+                    if not isinstance(event, dict):
+                        logger.warning("Ignoring malformed payload for %s: %r", msg.subject, event)
+                        continue
+                    await callback(service, event)
+                except json.JSONDecodeError:
+                    logger.warning("Ignoring invalid JSON payload for subject: %s", msg.subject)
+>>>>>>> theirs
                 except Exception as e:
-                    logger.error(f"Error processing latency signal: {e}")
-        
+                    logger.error("Error processing %s signal: %s", signal_name, e)
+
         except NATSError as e:
-            logger.error(f"Subscription error: {e}")
+            logger.error("Subscription error on %s: %s", pattern, e)
+
+    async def _on_queue_depth_signal(self, service: str, event: dict):
+        """Handle queue depth signal and trigger scaling decisions."""
+        depth = event.get('depth', 0)
+        if not isinstance(depth, (int, float)) or depth < 0:
+            logger.warning("Ignoring invalid depth for %s: %r", service, depth)
+            return
+        self.service_demand[service] = float(depth)
+        await self.check_scaling(service)
+
+    async def _on_latency_signal(self, service: str, event: dict):
+        """Handle latency signal."""
+        latency = event.get('latency_ms', 0)
+        if not isinstance(latency, (int, float)) or latency < 0:
+            logger.warning("Ignoring invalid latency for %s: %r", service, latency)
+            return
+        self.service_latency[service] = float(latency)
     
     async def check_scaling(self, service: str):
         """Check if service needs scaling"""

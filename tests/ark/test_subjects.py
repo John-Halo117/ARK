@@ -9,6 +9,7 @@ from ark.subjects import (
     EVENT_SENSOR_READING, EVENT_MEDIA_PLAYBACK, EVENT_NETWORK_DEVICE,
     call_subject, call_subscribe_subject, reply_subject,
     parse_capability_from_subject, parse_service_from_queue_depth,
+    parse_service_from_system_subject,
 )
 
 
@@ -125,3 +126,26 @@ class TestParseServiceFromQueueDepth:
 
     def test_short(self):
         assert parse_service_from_queue_depth("ark.system") == "unknown"
+
+
+class TestParseServiceFromSystemSubject:
+    def test_queue_depth_service(self):
+        assert parse_service_from_system_subject(
+            "ark.system.queue_depth.opencode",
+            expected_signal="queue_depth",
+        ) == "opencode"
+
+    def test_latency_service(self):
+        assert parse_service_from_system_subject(
+            "ark.system.latency.openwolf",
+            expected_signal="latency",
+        ) == "openwolf"
+
+    def test_invalid_signal(self):
+        assert parse_service_from_system_subject(
+            "ark.system.latency.openwolf",
+            expected_signal="queue_depth",
+        ) == "unknown"
+
+    def test_invalid_shape(self):
+        assert parse_service_from_system_subject("ark.system.latency") == "unknown"

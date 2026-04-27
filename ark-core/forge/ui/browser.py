@@ -421,8 +421,10 @@ class BrowserState:
             return self._process_request(request, client)
         except Exception as exc:  # pragma: no cover - safety net for interactive mode
             with self._lock:
-                self.controller.set_stage("BLOCKED", str(exc))
-                self.controller.log(f"Run failed: {exc}")
+                self.controller.set_stage("BLOCKED", "run failed")
+                self.controller.log(
+                    f"Run failed; moved to manual review ({type(exc).__name__})."
+                )
             return None
 
     def _process_request(
@@ -877,8 +879,8 @@ class _LegacyBrowserState:
                 return {"ok": False, "error": "missing selection"}
         try:
             apply_unified_diff(self.repo_root, patch)
-        except ValueError as exc:
-            self._log(f"Could not apply patch: {exc}")
+        except ValueError:
+            self._log("Could not apply patch cleanly.")
             return {"ok": False, "error": PATCH_APPLY_ERROR}
         self._remember_applied_patch(
             label=label,
@@ -1022,8 +1024,8 @@ class _LegacyBrowserState:
             latest = self.applied_history[-1]
         try:
             apply_unified_diff(self.repo_root, latest.revert_patch)
-        except ValueError as exc:
-            self._log(f"Could not revert {latest.label}: {exc}")
+        except ValueError:
+            self._log(f"Could not revert {latest.label} cleanly.")
             return {"ok": False, "error": PATCH_REVERT_ERROR}
         with self._lock:
             self.applied_history.pop()
@@ -1161,8 +1163,10 @@ class _LegacyBrowserState:
                 )
             except Exception as exc:  # pragma: no cover - interactive safety net
                 with self._lock:
-                    self._set_stage("BLOCKED", str(exc))
-                    self._log(f"Run failed: {exc}")
+                    self._set_stage("BLOCKED", "run failed")
+                    self._log(
+                        f"Run failed; moved to manual review ({type(exc).__name__})."
+                    )
                 break
             self.record_result(result)
             if not request.auto_loop or result["status"] in {
