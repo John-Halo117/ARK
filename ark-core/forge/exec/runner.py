@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import re
 import subprocess
 import sys
 import tempfile
@@ -42,17 +41,14 @@ def _load_validate_docker_arg():
             spec.loader.exec_module(module)
             return module.validate_docker_arg
         except (ModuleNotFoundError, ImportError):
-            return _passthrough_validator
+            return _reject_all_validator
 
 
-_SAFE_CMD_RE = re.compile(r"^[a-zA-Z0-9_.=/:@-]+$")
-
-
-def _passthrough_validator(arg: str) -> str:
-    """Fallback validator when ark.security is unavailable (e.g. missing aiohttp)."""
-    if not isinstance(arg, str) or not _SAFE_CMD_RE.match(arg):
-        raise ValueError(f"Unsafe docker argument: {arg!r}")
-    return arg
+def _reject_all_validator(arg: str) -> str:
+    """Fail-closed fallback: reject every argument when ark.security cannot load."""
+    raise ValueError(
+        f"ark.security unavailable — refusing to run unvalidated argument: {arg!r}"
+    )
 
 
 def run_command(command: list[str], cwd: Path, timeout: int = 900) -> dict[str, object]:

@@ -140,7 +140,10 @@ class Autoscaler:
         if not isinstance(depth, (int, float)) or depth < 0:
             logger.warning("Ignoring invalid depth for %s: %r", service, depth)
             return
-        self.service_demand[service] = float(depth)
+        self.reducer_engine.apply(
+            "autoscaler.demand",
+            {"service": service, "depth": depth},
+        )
         await self.check_scaling(service)
 
     async def _on_latency_signal(self, service: str, event: dict):
@@ -149,7 +152,10 @@ class Autoscaler:
         if not isinstance(latency, (int, float)) or latency < 0:
             logger.warning("Ignoring invalid latency for %s: %r", service, latency)
             return
-        self.service_latency[service] = float(latency)
+        self.reducer_engine.apply(
+            "autoscaler.latency",
+            {"service": service, "latency_ms": latency},
+        )
     
     async def check_scaling(self, service: str):
         """Check if service needs scaling"""
