@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -44,10 +45,13 @@ def _load_validate_docker_arg():
             return _passthrough_validator
 
 
+_SAFE_CMD_RE = re.compile(r"^[a-zA-Z0-9_.=/:@-]+$")
+
+
 def _passthrough_validator(arg: str) -> str:
     """Fallback validator when ark.security is unavailable (e.g. missing aiohttp)."""
-    if not isinstance(arg, str):
-        raise ValueError(f"expected str, got {type(arg).__name__}")
+    if not isinstance(arg, str) or not _SAFE_CMD_RE.match(arg):
+        raise ValueError(f"Unsafe docker argument: {arg!r}")
     return arg
 
 
