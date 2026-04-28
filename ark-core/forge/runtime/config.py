@@ -82,6 +82,33 @@ class RuntimeCapabilityConfig:
 
 
 @dataclass(frozen=True)
+class ProjectMapConfig:
+    """Bounded repo summary defaults for beginner-friendly Forge wiki cards."""
+
+    command_timeout_s: int = 3
+    max_files_per_area: int = 300
+    highlighted_roots: tuple[tuple[str, str, str], ...] = (
+        ("ark-core/forge", "Forge engine", "Self-coding engine, UI, runtime, and gates"),
+        ("ark-core/tests", "Safety tests", "Checks that keep Forge behavior stable"),
+        ("docker", "Docker setup", "Container and local service helpers"),
+        ("scripts", "Launch scripts", "Click/open and setup helpers"),
+        (".github", "GitHub setup", "PR checks, workflows, and repo automation"),
+    )
+    text_suffixes: tuple[str, ...] = (
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".json",
+        ".toml",
+        ".yml",
+        ".yaml",
+        ".md",
+        ".sh",
+    )
+
+
+@dataclass(frozen=True)
 class RuntimeBootstrapConfig:
     """Bounded local-runtime startup defaults for low-friction Forge boot."""
 
@@ -298,6 +325,7 @@ DEFAULT_CONTEXT_CONFIG = ContextBuildConfig()
 DEFAULT_POLICY_CONFIG = ForgePolicyConfig()
 DEFAULT_STRUCTURE_CONFIG = StructurePolicyConfig()
 DEFAULT_RUNTIME_CAPABILITY_CONFIG = RuntimeCapabilityConfig()
+DEFAULT_PROJECT_MAP_CONFIG = ProjectMapConfig()
 DEFAULT_RUNTIME_BOOTSTRAP_CONFIG = RuntimeBootstrapConfig()
 DEFAULT_MCP_RUNTIME_CONFIG = McpRuntimeConfig()
 DEFAULT_UI_STATE_CONFIG = UiStateConfig()

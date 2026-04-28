@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from forge.ui import browser
-from forge.ui.common import PATCH_APPLY_ERROR, PATCH_REVERT_ERROR
+from forge.ui.common import (
+    PATCH_APPLY_ERROR,
+    PATCH_REVERT_ERROR,
+    build_client_from_request,
+)
 
 
 def test_browser_snapshot_exposes_quickstart_and_legend(
@@ -34,8 +38,22 @@ def test_browser_snapshot_exposes_quickstart_and_legend(
     assert snapshot["workflow_presets"]
     assert snapshot["tool_profiles"]
     assert snapshot["capabilities"]
+    assert snapshot["codebase_wiki"]
+    assert snapshot["tool_actions"]
     assert snapshot["runtime"]["ready"] is True
     assert "qwen3-coder:30b" in snapshot["runtime_summary"]
+
+
+def test_missing_runtime_returns_disabled_client(tmp_path: Path) -> None:
+    request = _run_request(tmp_path)
+    client, summary = build_client_from_request(
+        request,
+        runtime_probe=lambda preferred_url=None, timeout_s=5: (None, []),
+        model_selector=lambda models, preferred=None: None,
+    )
+
+    assert client.enabled is False
+    assert "not detected" in summary.lower()
 
 
 def test_browser_mode_and_tau_commands_update_state(

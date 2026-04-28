@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
+import subprocess
 from typing import Any, Callable
 
 from ..models.discovery import (
@@ -13,7 +14,8 @@ from ..models.discovery import (
     choose_model,
 )
 from ..models.ollama_client import OllamaClient, OllamaConfig
-from ..runtime.config import DEFAULT_UI_STATE_CONFIG
+from ..runtime.capabilities import CapabilityStatus
+from ..runtime.config import DEFAULT_PROJECT_MAP_CONFIG, DEFAULT_UI_STATE_CONFIG
 from ..transform.apply import extract_changed_files
 
 PATCH_APPLY_ERROR = "patch could not be applied cleanly"
@@ -255,6 +257,71 @@ def tool_profiles() -> list[dict[str, Any]]:
     ]
 
 
+def build_codebase_wiki(repo_root: Path) -> list[dict[str, str]]:
+    """Return bounded, layman-friendly project map cards for Forge UI surfaces."""
+
+    git = _git_summary(repo_root)
+    cards = [
+        {
+            "title": "Current repo",
+            "summary": git["summary"],
+            "detail": git["detail"],
+            "task": "Explain the current repo status and suggest the safest next action.",
+        }
+    ]
+    for root, title, summary in DEFAULT_PROJECT_MAP_CONFIG.highlighted_roots:
+        path = repo_root / root
+        if not path.exists():
+            continue
+        count = _bounded_file_count(path)
+        cards.append(
+            {
+                "title": title,
+                "summary": summary,
+                "detail": _count_label(count, "tracked-looking file"),
+                "task": f"Explain {root} and identify the safest improvement to make next.",
+            }
+        )
+    return cards
+
+
+def build_tool_actions(
+    repo_root: Path, capabilities: list[CapabilityStatus]
+) -> list[dict[str, str]]:
+    """Return safe task templates for GitHub, git, Docker, and code repair flows."""
+
+    docker = _capability_status(capabilities, "Docker")
+    remote = _safe_git_output(repo_root, ("git", "remote", "get-url", "origin"))
+    github_text = "connected" if "github.com" in remote.lower() else "not connected"
+    actions = [
+        {
+            "label": "Fix code",
+            "description": "Find the smallest safe code change and verify it.",
+            "task": "Fix the highest-priority failing code path, run checks, and show me the safest patch.",
+            "files": "",
+        },
+        {
+            "label": "Check PR",
+            "description": f"Review GitHub status ({github_text}) and propose a safe fix.",
+            "task": "Check the current GitHub PR and failing checks, then prepare the safest local fix.",
+            "files": ".github",
+        },
+        {
+            "label": "Explain repo",
+            "description": "Build a Devin-style codebase map in plain English.",
+            "task": "Create a concise codebase wiki: main areas, important flows, risks, and where to edit safely.",
+            "files": "",
+        },
+        {
+            "label": "Docker help",
+            "description": f"Inspect Docker setup ({docker}) and suggest safe edits.",
+            "task": "Check the Docker setup, explain what is safe to change, and prepare any needed Dockerfile or compose fix.",
+            "files": "Dockerfile docker-compose.yml compose.yml compose.yaml",
+        },
+    ]
+    return actions
+
+
 def render_command_legend() -> str:
     return "\n".join(
         f"{command:<14} {meaning}" for command, meaning in command_legend()
@@ -285,7 +352,7 @@ def render_redteam_panel(
         findings = list(record.findings)
         counterfactuals = list(record.counterfactuals)
         risk = record.risk
-    lines = [f"Risk: {risk:.2f}"]
+    lines = [f"Risk: {_risk_label(risk)} ({risk:.2f})"]
     if attackers:
         lines.extend(
             f"{name}: {float(value):.2f}" for name, value in sorted(attackers.items())
@@ -312,7 +379,14 @@ def render_test_panel(
             f"synth_ok: {_status_icon(bool(verify.get('synth_ok', False)))}",
             f"lint_ok: {_status_icon(bool(verify.get('lint_ok', False)))}",
             f"types_ok: {_status_icon(bool(verify.get('types_ok', False)))}",
-            f"coverage_delta: {float(verify.get('coverage_delta', record.payload.get('metrics', {}).get('coverage_delta', 0.0))):+.2f}",
+            _coverage_line(
+                float(
+                    verify.get(
+                        "coverage_delta",
+                        record.payload.get("metrics", {}).get("coverage_delta", 0.0),
+                    )
+                )
+            ),
         ]
         if expanded:
             details = dict(verify.get("details", {}))
@@ -325,7 +399,7 @@ def render_test_panel(
             f"synth_ok: {_status_icon(record.synth_ok)}",
             f"lint_ok: {_status_icon(record.lint_ok)}",
             f"types_ok: {_status_icon(record.types_ok)}",
-            f"coverage_delta: {record.coverage_delta:+.2f}",
+            _coverage_line(record.coverage_delta),
         ]
         if expanded and record.detail:
             lines.extend(["", record.detail])
@@ -485,7 +559,23 @@ def _risk_label(risk: float) -> str:
 
 
 def _risk_threshold_label(value: float) -> str:
-    return f"{value:.2f} max risk before Forge blocks a change"
+    if value <= 0.25:
+        return "Very strict: only very safe changes pass automatically"
+    if value <= 0.40:
+        return "Normal safety: balanced for everyday coding"
+    if value <= 0.65:
+        return "Flexible: allows more uncertain changes for review"
+    return "Loose: show more risky options, review carefully"
+
+
+def _coverage_line(delta: float) -> str:
+    if delta > 0:
+        label = "Coverage improved"
+    elif delta == 0:
+        label = "Coverage held steady"
+    else:
+        label = "Coverage dropped"
+    return f"{label}: {delta:+.2f} (coverage_delta: {delta:+.2f})"
 
 
 def _context_label(level: int) -> str:
@@ -506,7 +596,7 @@ def _stage_summary(stage: str) -> str:
         "queued": "Task is queued",
         "runtime unavailable": "Waiting for the AI runtime",
         "complete": "Ready for you to review",
-        "blocked": "Stopped because something needs attention",
+        "blocked": "Needs your review; Forge will keep the session alive",
         "interrupted": "Paused safely",
         "decision": "Deciding whether a change is safe",
         "testing": "Running checks",
@@ -539,8 +629,8 @@ def _pipeline_line(stage: str) -> str:
         "COMMIT",
     ]
     bucket = _pipeline_bucket(stage)
-    if bucket == "BLOCKED":
-        return " -> ".join([*steps, "[BLOCKED]"])
+    if bucket == "REVIEW":
+        return " -> ".join([*steps, "[REVIEW]"])
     highlighted: list[str] = []
     current_index = steps.index(bucket) if bucket in steps else -1
     for index, step in enumerate(steps):
@@ -579,7 +669,7 @@ def _pipeline_bucket(stage: str) -> str:
         "decision": "DECIDE",
         "apply": "COMMIT",
         "complete": "COMMIT",
-        "blocked": "BLOCKED",
+        "blocked": "REVIEW",
     }
     return mapping.get(stage, "CLASSIFY")
 
@@ -618,7 +708,7 @@ def status_from_result(result: dict[str, Any]) -> str:
     if result.get("status") == "promote":
         return "COMMIT READY"
     if result.get("status") == "manual_review":
-        return "BLOCKED"
+        return "WAITING"
     if result.get("status") == "repair":
         return "WAITING"
     return "WAITING"
@@ -639,7 +729,7 @@ def event_status(stage: str, event: dict[str, Any], *, current: str) -> str:
     if stage == "decision":
         return "COMMIT READY" if event.get("status") == "promote" else "WAITING"
     if stage == "blocked":
-        return "BLOCKED"
+        return "WAITING"
     if stage in {"apply", "complete"}:
         return current if current != "RUNNING" else "WAITING"
     if stage in {
@@ -791,14 +881,30 @@ def build_client_from_request(
     *,
     runtime_probe: Callable[..., tuple[str | None, list[str]]] | None = None,
     model_selector: Callable[..., str | None] | None = None,
-) -> tuple[OllamaClient | None, str]:
+) -> tuple[OllamaClient, str]:
     probe = runtime_probe or detect_ollama_endpoint
     select_model = model_selector or choose_model
     endpoint, models = probe(preferred_url=request.preferred_url, timeout_s=5)
     model = select_model(models, preferred=request.preferred_model)
     summary = compact_runtime_summary(endpoint, model, models)
     if endpoint is None or model is None:
-        return None, summary
+        fallback = OllamaConfig()
+        config = OllamaConfig(
+            enabled=False,
+            required=False,
+            planner_enabled=False,
+            redteam_enabled=False,
+            base_url=endpoint or request.preferred_url or fallback.base_url,
+            executor_model=model or request.preferred_model or fallback.executor_model,
+            planner_model=model or request.preferred_model or fallback.planner_model,
+            redteam_model=model or request.preferred_model or fallback.redteam_model,
+            timeout_s=request.timeout_s,
+            num_ctx=request.num_ctx,
+            temperature=fallback.temperature,
+            top_p=fallback.top_p,
+            base_seed=fallback.base_seed,
+        )
+        return OllamaClient(config=config), summary
     config = OllamaConfig(
         enabled=True,
         required=True,
@@ -831,3 +937,50 @@ def runtime_doctor_message(runtime_summary: str) -> str:
         "Forge is trying to wake up the local AI for you. "
         "If it still does not come online, open Nerd Stuff for exact setup steps."
     )
+
+
+def _capability_status(capabilities: list[CapabilityStatus], name: str) -> str:
+    for capability in capabilities:
+        if capability.name.lower() == name.lower():
+            return capability.status
+    return "not checked"
+
+
+def _bounded_file_count(path: Path) -> int:
+    count = 0
+    for child in path.rglob("*"):
+        if count >= DEFAULT_PROJECT_MAP_CONFIG.max_files_per_area:
+            return count
+        if not child.is_file() or child.suffix not in DEFAULT_PROJECT_MAP_CONFIG.text_suffixes:
+            continue
+        count += 1
+    return count
+
+
+def _git_summary(repo_root: Path) -> dict[str, str]:
+    branch = _safe_git_output(repo_root, ("git", "branch", "--show-current"))
+    dirty = _safe_git_output(repo_root, ("git", "status", "--porcelain"))
+    commit = _safe_git_output(repo_root, ("git", "rev-parse", "--short", "HEAD"))
+    name = branch or "detached"
+    detail = "No local edits detected." if not dirty else "Local edits are present."
+    return {
+        "summary": f"Git branch {name} at {commit or 'unknown commit'}",
+        "detail": detail,
+    }
+
+
+def _safe_git_output(repo_root: Path, command: tuple[str, ...]) -> str:
+    try:
+        result = subprocess.run(
+            command,
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=DEFAULT_PROJECT_MAP_CONFIG.command_timeout_s,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()

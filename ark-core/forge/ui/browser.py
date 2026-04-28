@@ -17,7 +17,7 @@ from ..models.discovery import (
     detect_ollama_endpoint,
     choose_model,
 )
-from ..models.ollama_client import OllamaClient, OllamaConfig
+from ..models.ollama_client import OllamaClient
 from ..runtime.bootstrap import RuntimeStatus
 from ..runtime.config import DEFAULT_UI_STATE_CONFIG
 from ..transform.apply import (
@@ -392,10 +392,7 @@ class BrowserState:
                 break
             with self._lock:
                 self.controller.record_result(result)
-            if not request.auto_loop or result["status"] in {
-                "promote",
-                "manual_review",
-            }:
+            if not request.auto_loop or result["status"] == "promote":
                 break
         with self._lock:
             self.controller.set_running_state(False)
@@ -412,16 +409,14 @@ class BrowserState:
         with self._lock:
             self.controller.runtime_summary = runtime_summary
             self.controller.persist_session()
-        if client is None:
-            with self._lock:
-                self.controller.set_stage("RUNTIME MISSING", "runtime unavailable")
+            if client is None or not getattr(client, "enabled", True):
+                self.controller.set_stage("WAITING", "runtime warming")
                 self.controller.log(_runtime_doctor_message(runtime_summary))
-            return None
         try:
             return self._process_request(request, client)
         except Exception as exc:  # pragma: no cover - safety net for interactive mode
             with self._lock:
-                self.controller.set_stage("BLOCKED", "run failed")
+                self.controller.set_stage("WAITING", "run needs review")
                 self.controller.log(
                     f"Run failed; moved to manual review ({type(exc).__name__})."
                 )
@@ -458,34 +453,9 @@ class BrowserState:
         with self._lock:
             self.controller.handle_event(payload)
 
-    def _build_client(self, request: RunRequest) -> tuple[OllamaClient | None, str]:
-        endpoint, models = detect_ollama_endpoint(
-            preferred_url=request.preferred_url, timeout_s=5
-        )
-        model = choose_model(models, preferred=request.preferred_model)
-        summary = compact_runtime_summary(endpoint, model, models)
-        if endpoint is None or model is None:
-            return None, summary
-        return (
-            OllamaClient(
-                config=OllamaConfig(
-                    enabled=True,
-                    required=True,
-                    planner_enabled=request.planner_enabled,
-                    redteam_enabled=request.redteam_enabled,
-                    base_url=endpoint,
-                    executor_model=model,
-                    planner_model=model,
-                    redteam_model=model,
-                    timeout_s=request.timeout_s,
-                    num_ctx=request.num_ctx,
-                    temperature=0.2,
-                    top_p=0.9,
-                    base_seed=0,
-                )
-            ),
-            summary,
-        )
+    def _build_client(self, request: RunRequest) -> tuple[OllamaClient, str]:
+        client, summary = self.controller.build_client(request)
+        return client, summary
 
 
 class _LegacyBrowserState:
@@ -551,8 +521,9 @@ class _LegacyBrowserState:
             self.machine_state["runtime_model"] = model
             self.machine_state["runtime_models"] = models
             if endpoint is None or model is None:
-                self.machine_state["status"] = "RUNTIME MISSING"
-            elif self.machine_state.get("status") == "RUNTIME MISSING":
+                self.machine_state["status"] = "WAITING"
+                self.machine_state["stage_label"] = "warming ai"
+            elif self.machine_state.get("stage_label") == "warming ai":
                 self.machine_state["status"] = "WAITING"
                 self.machine_state["stage_label"] = "idle"
             self._log(summary)
@@ -1132,11 +1103,10 @@ class _LegacyBrowserState:
             client, runtime_summary = _build_client_from_request(request)
             with self._lock:
                 self.runtime_summary = runtime_summary
-            if client is None:
+            if not getattr(client, "enabled", True):
                 with self._lock:
-                    self._set_stage("RUNTIME MISSING", "runtime unavailable")
+                    self._set_stage("WAITING", "runtime warming")
                     self._log(_runtime_doctor_message(runtime_summary))
-                break
             orchestrator = ForgeOrchestrator(
                 request.repo_root,
                 apply_accepted=request.apply_accepted,
@@ -1163,16 +1133,13 @@ class _LegacyBrowserState:
                 )
             except Exception as exc:  # pragma: no cover - interactive safety net
                 with self._lock:
-                    self._set_stage("BLOCKED", "run failed")
+                    self._set_stage("WAITING", "run needs review")
                     self._log(
                         f"Run failed; moved to manual review ({type(exc).__name__})."
                     )
                 break
             self.record_result(result)
-            if not request.auto_loop or result["status"] in {
-                "promote",
-                "manual_review",
-            }:
+            if not request.auto_loop or result["status"] == "promote":
                 break
         with self._lock:
             self._set_running_state(False)
@@ -1748,6 +1715,11 @@ def _browser_page() -> str:
       display: grid;
       gap: 8px;
     }
+    .action-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .task-examples {
       grid-template-columns: 1fr;
     }
@@ -1783,6 +1755,27 @@ def _browser_page() -> str:
       margin-bottom: 4px;
     }
     .preset span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .wiki-card {
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel-alt);
+      cursor: pointer;
+    }
+    .wiki-card:hover {
+      border-color: var(--line-strong);
+      background: var(--panel-soft);
+    }
+    .wiki-card strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .wiki-card span, .wiki-card small {
+      display: block;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.35;
@@ -1907,7 +1900,7 @@ def _browser_page() -> str:
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .workspace { grid-template-columns: 1fr; }
-      .composer .preset-grid, #capabilities-view, .nerd-grid { grid-template-columns: 1fr; }
+      .composer .preset-grid, #capabilities-view, .nerd-grid, .action-grid { grid-template-columns: 1fr; }
       body { padding-bottom: 280px; }
     }
   </style>
@@ -1937,7 +1930,16 @@ def _browser_page() -> str:
             <div class="helper-title">Example tasks</div>
             <div id="example-tasks" class="task-examples"></div>
           </div>
+          <div>
+            <div class="helper-title">One-click jobs</div>
+            <div id="tool-actions" class="task-examples"></div>
+          </div>
         </div>
+      </section>
+      <section class="card">
+        <h2>Project Map</h2>
+        <p class="section-note">A small codebase wiki Forge can use before it edits.</p>
+        <div id="wiki-view" class="task-examples"></div>
       </section>
       <section id="candidate-card" class="card hidden">
         <h2>Choices to Review</h2>
@@ -2046,30 +2048,30 @@ def _browser_page() -> str:
         <label class="check"><input type="checkbox" id="planner-input"> Planner</label>
         <label class="check"><input type="checkbox" id="redteam-input"> Model redteam</label>
         <label class="check"><input type="checkbox" id="debug-input"> Debug</label>
-        <label class="small">Mode
+        <label class="small">Search
           <select id="mode-input">
-            <option value="AUTO">AUTO</option>
-            <option value="SIMPLE">SIMPLE</option>
-            <option value="BISECT">BISECT</option>
-            <option value="TRISECT">TRISECT</option>
+            <option value="AUTO">Balanced</option>
+            <option value="SIMPLE">Focused</option>
+            <option value="BISECT">Compare 2</option>
+            <option value="TRISECT">Compare 3</option>
           </select>
         </label>
-        <label class="small">Risk τ
+        <label class="small">Strictness
           <input id="tau-input" type="number" min="0" max="1" step="0.05" value="0.35">
         </label>
-        <label class="small">Context
+        <label class="small">How much code
           <select id="context-input">
-            <option value="0">L0</option>
-            <option value="1">L1</option>
-            <option value="2">L2</option>
-            <option value="3">L3</option>
+            <option value="0">Small</option>
+            <option value="1">Normal</option>
+            <option value="2">Broad</option>
+            <option value="3">Deep</option>
           </select>
         </label>
-        <label class="small">Tests
+        <label class="small">Checks
           <select id="tests-input">
-            <option value="default">default</option>
-            <option value="fast">fast</option>
-            <option value="full">full</option>
+            <option value="default">Normal</option>
+            <option value="fast">Fast</option>
+            <option value="full">Thorough</option>
           </select>
         </label>
         <span class="small">Ctrl+Enter starts a run. The command bar below is optional.</span>
@@ -2096,6 +2098,8 @@ def _browser_page() -> str:
       logs: document.getElementById("logs-view"),
       capabilities: document.getElementById("capabilities-view"),
       runtimeActions: document.getElementById("runtime-actions"),
+      wiki: document.getElementById("wiki-view"),
+      toolActions: document.getElementById("tool-actions"),
       candidateList: document.getElementById("candidate-list"),
       historyList: document.getElementById("history-list"),
       candidateCard: document.getElementById("candidate-card"),
@@ -2188,6 +2192,8 @@ def _browser_page() -> str:
       renderList(ids.runtimeActions, (data.runtime && data.runtime.actions) || [], item => `<li>${escapeHtml(item)}</li>`);
       renderList(ids.legend, data.legend, item => `<li><strong>${escapeHtml(item.command)}</strong>${escapeHtml(item.meaning)}</li>`);
       renderTaskExamples(data.example_tasks || []);
+      renderToolActions(data.tool_actions || []);
+      renderWiki(data.codebase_wiki || []);
       renderPresets(data.workflow_presets || [], data.controls);
       renderToolProfiles(data.tool_profiles || [], data.controls);
       renderCapabilities(data.capabilities || []);
@@ -2222,7 +2228,7 @@ def _browser_page() -> str:
       const title = runtime.title || (ready ? "AI is ready" : "Waking up local AI");
       const summary = runtime.message || data.runtime_summary || "";
       const steps = (data.doctor || []).map(item => `<li>${escapeHtml(item)}</li>`).join("");
-      ids.runtimeBanner.className = `runtime-banner ${ready ? "good" : "bad"}`;
+      ids.runtimeBanner.className = `runtime-banner ${ready ? "good" : ""}`;
       ids.runtimeBanner.innerHTML = `<strong>${title}</strong><span>${escapeHtml(summary)}</span><ol class="quickstart">${steps}</ol>`;
     }
 
@@ -2231,6 +2237,35 @@ def _browser_page() -> str:
       ids.examples.querySelectorAll("button").forEach(button => {
         button.addEventListener("click", () => {
           ids.task.value = button.textContent;
+          ids.task.focus();
+        });
+      });
+    }
+
+    function renderToolActions(items) {
+      ids.toolActions.innerHTML = items.map(item => {
+        return `<button class="chip" type="button" data-task="${escapeAttr(item.task)}" data-files="${escapeAttr(item.files || "")}"><strong>${escapeHtml(item.label)}</strong><br><span>${escapeHtml(item.description)}</span></button>`;
+      }).join("");
+      ids.toolActions.querySelectorAll("button").forEach(button => {
+        button.addEventListener("click", () => {
+          ids.task.value = button.dataset.task || "";
+          ids.filesInput.value = button.dataset.files || "";
+          ids.task.focus();
+        });
+      });
+    }
+
+    function renderWiki(items) {
+      if (!items.length) {
+        ids.wiki.innerHTML = '<div class="empty">Forge has not mapped this repo yet.</div>';
+        return;
+      }
+      ids.wiki.innerHTML = items.map(item => {
+        return `<div class="wiki-card" data-task="${escapeAttr(item.task || "")}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.summary)}</span><small>${escapeHtml(item.detail)}</small></div>`;
+      }).join("");
+      ids.wiki.querySelectorAll(".wiki-card").forEach(card => {
+        card.addEventListener("click", () => {
+          if (card.dataset.task) ids.task.value = card.dataset.task;
           ids.task.focus();
         });
       });

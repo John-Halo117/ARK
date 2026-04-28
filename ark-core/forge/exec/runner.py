@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 UNSAFE_COMMAND_MESSAGE = "command rejected by validation"
+_SAFE_CMD_RE = re.compile(r"^[a-zA-Z0-9_.=/:@{}-]+$")
 
 
 def project_python(tool_root: Path) -> str:
@@ -32,13 +33,13 @@ def _load_validate_docker_arg():
 
         return validate_docker_arg
     except ModuleNotFoundError:
-        security_path = Path(__file__).resolve().parents[3] / "ark" / "security.py"
-        spec = importlib.util.spec_from_file_location("ark_security", security_path)
-        if spec is None or spec.loader is None:
-            raise
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module.validate_docker_arg
+        return _validate_command_arg
+
+
+def _validate_command_arg(arg: str) -> str:
+    if not _SAFE_CMD_RE.match(arg):
+        raise ValueError(f"Unsafe command argument: {arg!r}")
+    return arg
 
 
 def run_command(command: list[str], cwd: Path, timeout: int = 900) -> dict[str, object]:
