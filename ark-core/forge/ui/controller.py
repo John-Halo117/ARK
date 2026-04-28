@@ -121,6 +121,8 @@ class ForgeOperatorController:
             self.session.applied_history
         )
         self.capabilities: list[CapabilityStatus] = []
+        self._cached_wiki: list[dict[str, Any]] = []
+        self._cached_tool_actions: list[dict[str, Any]] = []
         self._runtime_boot_thread: threading.Thread | None = None
         restored_logs = bool(self.logs)
         self.refresh_runtime(log_runtime=True, auto_boot=True)
@@ -200,6 +202,8 @@ class ForgeOperatorController:
         self.machine_state["capabilities"] = [
             item.as_dict() for item in self.capabilities
         ]
+        self._cached_wiki = build_codebase_wiki(self.repo_root)
+        self._cached_tool_actions = build_tool_actions(self.repo_root, self.capabilities)
 
     def refresh_history(self) -> None:
         history_loader = self.history_loader or load_history_records
@@ -281,8 +285,8 @@ class ForgeOperatorController:
             "workflow_presets": workflow_presets(),
             "tool_profiles": tool_profiles(),
             "capabilities": [item.as_dict() for item in self.capabilities],
-            "codebase_wiki": build_codebase_wiki(self.repo_root),
-            "tool_actions": build_tool_actions(self.repo_root, self.capabilities),
+            "codebase_wiki": self._cached_wiki,
+            "tool_actions": self._cached_tool_actions,
             "selected_label": selected_label(record),
             "running": self.running,
         }

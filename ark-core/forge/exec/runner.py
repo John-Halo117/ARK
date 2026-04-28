@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 UNSAFE_COMMAND_MESSAGE = "command rejected by validation"
-_SAFE_CMD_RE = re.compile(r"^[a-zA-Z0-9_.=/:@{}-]+$")
+_SAFE_CMD_RE = re.compile(r"^[a-zA-Z0-9_.=/:@-]+$")
 
 
 def project_python(tool_root: Path) -> str:

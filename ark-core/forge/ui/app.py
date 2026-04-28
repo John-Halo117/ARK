@@ -523,7 +523,7 @@ def launch(
                     )
                     break
                 self.call_from_thread(self._record_result, result)
-                if not request.auto_loop or result["status"] == "promote":
+                if not request.auto_loop or result["status"] in {"promote", "manual_review"}:
                     break
             self.call_from_thread(self._set_running_state, False)
             if self.stop_requested:

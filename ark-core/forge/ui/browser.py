@@ -392,7 +392,7 @@ class BrowserState:
                 break
             with self._lock:
                 self.controller.record_result(result)
-            if not request.auto_loop or result["status"] == "promote":
+            if not request.auto_loop or result["status"] in {"promote", "manual_review"}:
                 break
         with self._lock:
             self.controller.set_running_state(False)
@@ -1141,7 +1141,7 @@ class _LegacyBrowserState:
                     )
                 break
             self.record_result(result)
-            if not request.auto_loop or result["status"] == "promote":
+            if not request.auto_loop or result["status"] in {"promote", "manual_review"}:
                 break
         with self._lock:
             self._set_running_state(False)
