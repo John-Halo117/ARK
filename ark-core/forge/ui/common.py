@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
-from pathlib import Path
 import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
+from ..exec.runner import validated_command
 from ..models.discovery import (
+    choose_model,
     compact_runtime_summary,
     detect_ollama_endpoint,
-    choose_model,
 )
 from ..models.ollama_client import OllamaClient, OllamaConfig
 from ..runtime.capabilities import CapabilityStatus
@@ -971,8 +972,12 @@ def _git_summary(repo_root: Path) -> dict[str, str]:
 
 def _safe_git_output(repo_root: Path, command: tuple[str, ...]) -> str:
     try:
+        safe_command = validated_command(command)
+    except ValueError:
+        return ""
+    try:
         result = subprocess.run(
-            command,
+            safe_command,
             cwd=repo_root,
             check=False,
             capture_output=True,

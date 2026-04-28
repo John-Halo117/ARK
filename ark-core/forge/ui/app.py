@@ -482,6 +482,7 @@ def launch(
                     self.call_from_thread(
                         self._log, _runtime_doctor_message(runtime_summary)
                     )
+                    break
                 orchestrator = ForgeOrchestrator(
                     request.repo_root,
                     apply_accepted=request.apply_accepted,

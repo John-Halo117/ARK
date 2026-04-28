@@ -412,6 +412,7 @@ class BrowserState:
             if client is None or not getattr(client, "enabled", True):
                 self.controller.set_stage("WAITING", "runtime warming")
                 self.controller.log(_runtime_doctor_message(runtime_summary))
+                return None
         try:
             return self._process_request(request, client)
         except Exception as exc:  # pragma: no cover - safety net for interactive mode
@@ -1103,10 +1104,11 @@ class _LegacyBrowserState:
             client, runtime_summary = _build_client_from_request(request)
             with self._lock:
                 self.runtime_summary = runtime_summary
-            if not getattr(client, "enabled", True):
+            if client is None or not getattr(client, "enabled", True):
                 with self._lock:
                     self._set_stage("WAITING", "runtime warming")
                     self._log(_runtime_doctor_message(runtime_summary))
+                break
             orchestrator = ForgeOrchestrator(
                 request.repo_root,
                 apply_accepted=request.apply_accepted,
