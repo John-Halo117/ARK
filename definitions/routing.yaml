@@ -1,0 +1,8 @@
+{
+  "routes": [
+    {
+      "name": "record",
+      "cost": 0.1
+    }
+  ]
+}

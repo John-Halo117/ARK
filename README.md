@@ -40,6 +40,40 @@ ARK is a **self-scaling distributed compute organism** where:
 event pressure → mesh discovery → agent execution → state logging → feedback → autoscaling
 ```
 
+## SD-ARK Loop
+
+SD-ARK adds a deterministic Go spine for replayable, event-driven execution:
+
+```
+Event → Resolve(Δ) → TRISCA → S[6] → Policy → Intent → Action → Result → Meta(Δ_defs)
+```
+
+`S[6]` is the bounded TRISCA vector:
+
+```
+[structure, entropy, inequality, temporal, efficiency, signal_density]
+```
+
+### SD-ARK Module Map
+
+| Path | Role |
+| --- | --- |
+| `core/step.go` | Single Step loop, typed contracts, health signals, structured failures |
+| `core/trisca.go` | One deterministic TRISCA path producing `S[6]` |
+| `core/bayes.go` | Bounded log-odds update for evidence deltas |
+| `core/interpreter.go` | Wiring boundary from event ingress into Step |
+| `runtime/compiler.go` | Compiles bounded definition files into runtime tables |
+| `definitions/*.yaml` | JSON-compatible YAML policy, action, routing, and meta definitions |
+| `policy/policy.go` | Table-driven policy scoring with `confidence*EV-cost` |
+| `action/action.go` | Thin idempotent adapter execution boundary |
+| `meta/meta.go` | Bounded meta delta emission and safe local application |
+| `gsb/gsb.go` | Pub/sub interface with in-memory replayable implementation |
+| `api/server.go` | `/ingest`, `/gsb`, `/trisca`, `/policy`, `/action`, `/meta` handlers |
+
+Runtime caps are explicit in each module health result. Tables, request bodies,
+logs, actions, messages, observations, and emitted meta deltas are bounded so the
+loop remains replayable under partial failure.
+
 ---
 
 ## 🏗️ Architecture

@@ -5,6 +5,12 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 [ -f policy/ark_identity_rules.json ] || { echo "missing identity rules"; exit 1; }
+[ -f policy/import_registry.json ] || { echo "missing import registry"; exit 1; }
+
+python3 -m ark.import_audit "$ROOT" >/tmp/ark_import_audit.json || {
+  cat /tmp/ark_import_audit.json
+  exit 1
+}
 
 # enforce loop presence
 for stage in sense compress judge act verify remember; do
