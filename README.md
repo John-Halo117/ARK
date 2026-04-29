@@ -69,10 +69,41 @@ Event → Resolve(Δ) → TRISCA → S[6] → Policy → Intent → Action → R
 | `meta/meta.go` | Bounded meta delta emission and safe local application |
 | `gsb/gsb.go` | Pub/sub interface with in-memory replayable implementation |
 | `api/server.go` | `/ingest`, `/gsb`, `/trisca`, `/policy`, `/action`, `/meta` handlers |
+| `ark/sd_trisca.py` | Python TRISCA mirror for planners and tool selection |
+| `ark/task_graph.py` | Bounded DAG TaskSpec, executor, scheduler, chunker, reducer, replay cache |
+| `ark/tool_system.py` | TRISCA-driven tool registry and selector with max 5 exposed tools |
+| `ark/skills.py` | Skill pipelines that produce DAG task specs instead of tool exposure |
+| `ark/mcp_containment.py` | Sandboxed MCP fallback boundary outside the core loop |
+| `ark/codegen_safe.py` | Safe-mode plugin spec generation and validation without shell execution |
+| `ark/forge_planner.py` | Forge planner facade; agents emit plans and do not execute DAGs |
 
 Runtime caps are explicit in each module health result. Tables, request bodies,
 logs, actions, messages, observations, and emitted meta deltas are bounded so the
 loop remains replayable under partial failure.
+
+### SD-ARK Execution Flow
+
+```
+Reality
+  -> /ingest
+  -> /gsb
+  -> /trisca
+  -> S[6]
+  -> ToolSelector
+  -> Skills / Forge planners
+  -> DAG Scheduler (max concurrency 10)
+  -> API tools
+  -> optional MCP fallback
+  -> /action
+  -> Result
+  -> /meta
+```
+
+MCP is contained as `tool.mcp.exec` and is fallback-only. Tool exposure is capped
+at five selected tools, selected deterministically from TRISCA vectors, cost, and
+success rate. Missing tools go through safe-mode codegen as static plugin specs:
+generate spec, validate, sandbox result, then register only after external
+validation.
 
 ---
 

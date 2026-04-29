@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"bytes"
 	"os"
 	"path/filepath"
 	"time"
@@ -10,6 +10,7 @@ import (
 	"github.com/John-Halo117/ARK/arkfield/core"
 	"github.com/John-Halo117/ARK/arkfield/meta"
 	"github.com/John-Halo117/ARK/arkfield/policy"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -69,7 +70,7 @@ func Health() core.HealthStatus {
 	return core.HealthStatus{Status: "ok", Module: "runtime.compiler", RuntimeCap: 100 * time.Millisecond, MemoryCapMiB: 16}
 }
 
-// Compile reads YAML definition files encoded as strict JSON-compatible YAML and produces runtime tables.
+// Compile reads strict YAML definition files and produces static runtime tables.
 func Compile(paths DefinitionPaths) (Runtime, error) {
 	var policyTable policy.Table
 	if err := readDefinition(paths.Policies, &policyTable); err != nil {
@@ -134,8 +135,10 @@ func readDefinition(path string, target any) error {
 	if err != nil {
 		return core.NewFailure("DEFINITION_READ_FAILED", "definition file read failed", map[string]any{"path": path, "error": err.Error()}, true)
 	}
-	if err := json.Unmarshal(raw, target); err != nil {
-		return core.NewFailure("DEFINITION_PARSE_FAILED", "definition file must be strict JSON-compatible YAML", map[string]any{"path": path, "error": err.Error()}, false)
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(target); err != nil {
+		return core.NewFailure("DEFINITION_PARSE_FAILED", "definition file must be strict YAML", map[string]any{"path": path, "error": err.Error()}, false)
 	}
 	return nil
 }

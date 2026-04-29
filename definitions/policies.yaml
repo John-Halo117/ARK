@@ -1,28 +1,19 @@
-{
-  "rules": [
-    {
-      "id": "high-confidence-observe",
-      "when": "confidence>=0.5",
-      "action": "record",
-      "params": {
-        "mode": "sd-ark",
-        "surface": "policy"
-      },
-      "confidence": 0.9,
-      "ev": 1.0,
-      "cost": 0.1
-    },
-    {
-      "id": "default-observe",
-      "when": "always",
-      "action": "record",
-      "params": {
-        "mode": "sd-ark",
-        "surface": "fallback"
-      },
-      "confidence": 0.5,
-      "ev": 0.5,
-      "cost": 0.05
-    }
-  ]
-}
+rules:
+  - id: high-confidence-observe
+    when: confidence>=0.5
+    action: record
+    params:
+      mode: sd-ark
+      surface: policy
+    confidence: 0.9
+    ev: 1.0
+    cost: 0.1
+  - id: default-observe
+    when: always
+    action: record
+    params:
+      mode: sd-ark
+      surface: fallback
+    confidence: 0.5
+    ev: 0.5
+    cost: 0.05

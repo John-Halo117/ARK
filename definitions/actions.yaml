@@ -1,8 +1,3 @@
-{
-  "actions": [
-    {
-      "name": "record",
-      "adapter": "memory"
-    }
-  ]
-}
+actions:
+  - name: record
+    adapter: memory
