@@ -1,0 +1,6 @@
+rules:
+  - id: record-success
+    when: result.ok
+    patch:
+      last_success: record
+    reason: record successful action outcomes as bounded meta definitions
