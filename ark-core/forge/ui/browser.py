@@ -1695,6 +1695,40 @@ def _browser_page() -> str:
       display: grid;
       gap: 14px;
     }
+    .health-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 16px;
+    }
+    .health-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(5, 5, 5, 0.94);
+      padding: 13px;
+      min-height: 94px;
+    }
+    .health-card.good { border-color: rgba(45, 255, 145, 0.28); }
+    .health-card.warn { border-color: rgba(255, 205, 74, 0.40); }
+    .health-card.info { border-color: rgba(0, 213, 255, 0.30); }
+    .health-card strong {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .health-card b {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 15px;
+    }
+    .health-card span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
     .nerd-shell {
       display: grid;
       gap: 12px;
@@ -1740,6 +1774,15 @@ def _browser_page() -> str:
     }
     .chip {
       padding: 10px 12px;
+    }
+    .chip strong, .chip span {
+      display: block;
+    }
+    .chip span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin-top: 3px;
     }
     .preset {
       padding: 12px 13px;
@@ -1801,6 +1844,22 @@ def _browser_page() -> str:
       color: var(--text);
       font-weight: 600;
       margin-bottom: 8px;
+    }
+    .soft-details {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(5, 5, 5, 0.92);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    .soft-details summary {
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 800;
+      list-style: none;
+    }
+    .soft-details summary::-webkit-details-marker {
+      display: none;
     }
     .composer {
       position: fixed;
@@ -1902,7 +1961,7 @@ def _browser_page() -> str:
     @media (max-width: 1100px) {
       .layout { grid-template-columns: 1fr; }
       .workspace { grid-template-columns: 1fr; }
-      .composer .preset-grid, #capabilities-view, .nerd-grid, .action-grid { grid-template-columns: 1fr; }
+      .health-grid, .composer .preset-grid, #capabilities-view, .nerd-grid, .action-grid { grid-template-columns: 1fr; }
       body { padding-bottom: 280px; }
     }
   </style>
@@ -1911,13 +1970,14 @@ def _browser_page() -> str:
   <header class="topbar">
     <div>
       <h1>Forge</h1>
-      <p>Type the change you want. Forge writes, checks, and shows you the result before anything is used.</p>
+      <p>Type a task. Review the patch. Use it only when it looks right.</p>
     </div>
     <div id="status-pill" class="pill">WAITING</div>
   </header>
 
   <section id="status-strip" class="status-strip">Loading Forge…</section>
   <section id="runtime-banner" class="runtime-banner hidden"></section>
+  <section id="health-grid" class="health-grid"></section>
 
   <div class="layout">
     <aside class="sidebar">
@@ -1932,17 +1992,23 @@ def _browser_page() -> str:
             <div class="helper-title">Example tasks</div>
             <div id="example-tasks" class="task-examples"></div>
           </div>
-          <div>
-            <div class="helper-title">One-click jobs</div>
-            <div id="tool-actions" class="task-examples"></div>
-          </div>
         </div>
       </section>
       <section class="card">
-        <h2>Project Map</h2>
+        <h2>One-Click Jobs</h2>
+        <p class="section-note">Pick one, then press Start.</p>
+        <div id="tool-actions" class="task-examples"></div>
+      </section>
+      <details class="soft-details">
+        <summary>Project Map</summary>
         <p class="section-note">A small codebase wiki Forge can use before it edits.</p>
         <div id="wiki-view" class="task-examples"></div>
-      </section>
+      </details>
+      <details class="soft-details">
+        <summary>Forge Roadmap</summary>
+        <p class="section-note">Next upgrades queued for this app.</p>
+        <div id="improvement-view" class="task-examples"></div>
+      </details>
       <section id="candidate-card" class="card hidden">
         <h2>Choices to Review</h2>
         <p class="section-note">Forge may compare more than one safe-looking option. Pick one to inspect.</p>
@@ -1966,16 +2032,16 @@ def _browser_page() -> str:
           <p class="section-note">This is the exact code change Forge wants to make.</p>
           <pre id="diff-view">No diffs yet.</pre>
         </section>
-        <section class="card pane">
-          <h2>Checks</h2>
-          <p class="section-note">Forge runs tests and safety checks before a change is trusted.</p>
+        <details class="card pane soft-details">
+          <summary>Checks</summary>
+          <p class="section-note">Tests and verification details.</p>
           <pre id="tests-view">No result selected yet.</pre>
-        </section>
-        <section class="card pane">
-          <h2>Safety Review</h2>
-          <p class="section-note">Forge tries to break its own change before you use it.</p>
+        </details>
+        <details class="card pane soft-details">
+          <summary>Safety Review</summary>
+          <p class="section-note">How Forge tried to break the change.</p>
           <pre id="redteam-view">No result selected yet.</pre>
-        </section>
+        </details>
         <section class="card pane wide">
           <details class="helper-details nerd-shell">
             <summary>Nerd Stuff</summary>
@@ -2012,8 +2078,8 @@ def _browser_page() -> str:
   <section class="composer">
     <div class="composer-top">
       <div class="composer-head">
-        <strong>Tell Forge what to change</strong>
-        <span>Forge handles the background runtime work for you.</span>
+        <strong>What should Forge change?</strong>
+        <span>Plain English is perfect.</span>
       </div>
       <textarea id="task-input" placeholder="Example: Make the login error easier to understand without changing how sign-in works."></textarea>
     </div>
@@ -2088,10 +2154,12 @@ def _browser_page() -> str:
   <script>
     const stateUrl = "/api/state";
     const actionUrl = "/api/action";
+    let lastStatusText = "";
     const ids = {
       statusPill: document.getElementById("status-pill"),
       statusStrip: document.getElementById("status-strip"),
       runtimeBanner: document.getElementById("runtime-banner"),
+      health: document.getElementById("health-grid"),
       controlSummary: document.getElementById("control-summary"),
       diff: document.getElementById("diff-view"),
       tests: document.getElementById("tests-view"),
@@ -2101,6 +2169,7 @@ def _browser_page() -> str:
       capabilities: document.getElementById("capabilities-view"),
       runtimeActions: document.getElementById("runtime-actions"),
       wiki: document.getElementById("wiki-view"),
+      improvements: document.getElementById("improvement-view"),
       toolActions: document.getElementById("tool-actions"),
       candidateList: document.getElementById("candidate-list"),
       historyList: document.getElementById("history-list"),
@@ -2128,6 +2197,7 @@ def _browser_page() -> str:
     };
 
     async function post(payload) {
+      maybeRequestNotifications(payload.action);
       await fetch(actionUrl, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
@@ -2160,6 +2230,8 @@ def _browser_page() -> str:
     function render(data) {
       const status = data.control_summary.match(/^\[(.+?)\]/m);
       const statusText = status ? status[1] : "WAITING";
+      maybeNotify(statusText, data);
+      lastStatusText = statusText;
       ids.statusPill.textContent = statusText;
       ids.statusPill.className = `pill ${statusClass(statusText)}`;
       ids.statusStrip.textContent = data.status_strip;
@@ -2195,7 +2267,9 @@ def _browser_page() -> str:
       renderList(ids.legend, data.legend, item => `<li><strong>${escapeHtml(item.command)}</strong>${escapeHtml(item.meaning)}</li>`);
       renderTaskExamples(data.example_tasks || []);
       renderToolActions(data.tool_actions || []);
+      renderHealth(data.health_cards || []);
       renderWiki(data.codebase_wiki || []);
+      renderImprovements(data.improvement_plan || []);
       renderPresets(data.workflow_presets || [], data.controls);
       renderToolProfiles(data.tool_profiles || [], data.controls);
       renderCapabilities(data.capabilities || []);
@@ -2244,6 +2318,13 @@ def _browser_page() -> str:
       });
     }
 
+    function renderHealth(items) {
+      ids.health.innerHTML = items.map(item => {
+        const tone = item.tone || "info";
+        return `<div class="health-card ${escapeAttr(tone)}"><strong>${escapeHtml(item.label)}</strong><b>${escapeHtml(item.status)}</b><span>${escapeHtml(item.detail)}</span></div>`;
+      }).join("");
+    }
+
     function renderToolActions(items) {
       ids.toolActions.innerHTML = items.map(item => {
         return `<button class="chip" type="button" data-task="${escapeAttr(item.task)}" data-files="${escapeAttr(item.files || "")}"><strong>${escapeHtml(item.label)}</strong><br><span>${escapeHtml(item.description)}</span></button>`;
@@ -2271,6 +2352,16 @@ def _browser_page() -> str:
           ids.task.focus();
         });
       });
+    }
+
+    function renderImprovements(items) {
+      if (!items.length) {
+        ids.improvements.innerHTML = '<div class="empty">No roadmap loaded.</div>';
+        return;
+      }
+      ids.improvements.innerHTML = items.map(item => {
+        return `<div class="wiki-card"><strong>${escapeHtml(item.priority)} · ${escapeHtml(item.label)}</strong><span>${escapeHtml(item.description)}</span></div>`;
+      }).join("");
     }
 
     function renderPresets(items, controls) {
@@ -2354,6 +2445,25 @@ def _browser_page() -> str:
       if (lower.includes("attacking")) return "attacking";
       if (lower.includes("running")) return "running";
       return "waiting";
+    }
+
+    function maybeRequestNotifications(action) {
+      if (action !== "run" || !("Notification" in window)) return;
+      if (Notification.permission === "default") {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+
+    function maybeNotify(status, data) {
+      if (!("Notification" in window) || Notification.permission !== "granted") return;
+      if (status === lastStatusText) return;
+      if (status.includes("COMMIT READY")) {
+        new Notification("Forge patch ready", {body: "Review it, then choose Use This Change."});
+      }
+      const runtimeReady = data.runtime && data.runtime.ready;
+      if (runtimeReady && lastStatusText && lastStatusText.includes("WAITING")) {
+        new Notification("Forge AI ready", {body: "Ollama is connected."});
+      }
     }
 
     function escapeHtml(value) {

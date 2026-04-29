@@ -33,13 +33,16 @@ def test_browser_snapshot_exposes_quickstart_and_legend(
 
     assert "Forge browser app ready" in snapshot["logs"][-1]
     assert snapshot["legend"][0]["command"] == "Start"
-    assert "plain English" in snapshot["quickstart"][0]
+    assert "change you want" in snapshot["quickstart"][0]
     assert snapshot["example_tasks"]
     assert snapshot["workflow_presets"]
     assert snapshot["tool_profiles"]
     assert snapshot["capabilities"]
+    assert snapshot["health_cards"]
     assert snapshot["codebase_wiki"]
+    assert snapshot["improvement_plan"]
     assert snapshot["tool_actions"]
+    assert len(snapshot["tool_actions"]) == 10
     assert snapshot["runtime"]["ready"] is True
     assert "qwen3-coder:30b" in snapshot["runtime_summary"]
 

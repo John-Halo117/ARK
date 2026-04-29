@@ -178,6 +178,28 @@ class UiToolProfile:
 
 
 @dataclass(frozen=True)
+class UiActionTemplate:
+    """One plain-English operator action exposed by the browser app."""
+
+    identifier: str
+    label: str
+    description: str
+    task: str
+    files: str = ""
+    category: str = "daily"
+
+
+@dataclass(frozen=True)
+class UiImprovement:
+    """One queued product improvement shown in the Forge app."""
+
+    identifier: str
+    label: str
+    description: str
+    priority: str
+
+
+@dataclass(frozen=True)
 class UiStateConfig:
     """Shared UI defaults and bounded persistence settings."""
 
@@ -194,10 +216,9 @@ class UiStateConfig:
     test_mode: str = "default"
     tool_profile: str = "codex"
     quickstart: tuple[str, ...] = (
-        "Type what you want changed in plain English.",
-        "Press Start and let Forge prepare a safe code change.",
-        "Watch the proposed change and checks update live.",
-        "Use This Change if it looks right, or Skip This Change if it does not.",
+        "Type the change you want.",
+        "Press Start.",
+        "Review the proposed change before using it.",
     )
     example_tasks: tuple[str, ...] = (
         "Fix the failing tests without changing product behavior.",
@@ -218,6 +239,142 @@ class UiStateConfig:
         ("tests fast", "Prefer a quicker check pass"),
         ("mode tri", "Explore more options before deciding"),
         ("export", "Save the current Forge session to a file"),
+    )
+    action_templates: tuple[UiActionTemplate, ...] = (
+        UiActionTemplate(
+            "fix-code",
+            "Fix code",
+            "Find a small safe patch and verify it.",
+            "Find the highest-priority failing code path, make the smallest safe "
+            "fix, run checks, and show me the patch before applying it.",
+        ),
+        UiActionTemplate(
+            "repair-setup",
+            "Repair setup",
+            "Check local AI, Python, Git, Docker, and Forge launchers.",
+            "Run a Forge setup doctor pass, explain anything unhealthy in plain "
+            "English, and prepare safe fixes for local launcher or runtime files.",
+        ),
+        UiActionTemplate(
+            "check-pr",
+            "Check PR",
+            "Inspect GitHub CI failures and prepare a safe fix.",
+            "Check the current GitHub PR, summarize failing checks, identify the "
+            "safest fix, and prepare a local patch.",
+            ".github",
+        ),
+        UiActionTemplate(
+            "docker-doctor",
+            "Docker doctor",
+            "Explain containers, compose files, ports, and health.",
+            "Inspect Docker and compose setup, explain what is running, identify "
+            "risky config, and prepare safe Dockerfile or compose edits if needed.",
+            "Dockerfile docker-compose.yml compose.yml compose.yaml",
+        ),
+        UiActionTemplate(
+            "wiki",
+            "Update wiki",
+            "Refresh the codebase map in plain English.",
+            "Create a concise codebase wiki with main areas, important flows, "
+            "risks, and safe edit points.",
+        ),
+        UiActionTemplate(
+            "safe-mode",
+            "Safe mode",
+            "Restrict Forge to tiny low-risk edits.",
+            "Use safe mode: only propose the smallest low-risk change, avoid broad "
+            "refactors, and stop for review if confidence is low.",
+        ),
+        UiActionTemplate(
+            "replay",
+            "Explain last run",
+            "Show what Forge tried and why.",
+            "Replay the last Forge session in plain English: what was attempted, "
+            "what passed, what failed, and what the next safest step is.",
+        ),
+        UiActionTemplate(
+            "benchmark",
+            "Benchmark",
+            "Run a small progress check for Forge quality.",
+            "Prepare a bounded Forge benchmark plan covering bugfix, test repair, "
+            "Docker, and UI polish tasks.",
+        ),
+        UiActionTemplate(
+            "notify",
+            "Notifications",
+            "Add clear ready/failed desktop notifications.",
+            "Add low-noise desktop notifications for ready patches, interrupted "
+            "runs, and runtime recovery events.",
+        ),
+        UiActionTemplate(
+            "model-progress",
+            "Model progress",
+            "Show download and startup progress clearly.",
+            "Improve model startup and download progress UI so a non-coder can "
+            "see whether Forge is waking AI, downloading a model, or ready.",
+        ),
+    )
+    improvement_plan: tuple[UiImprovement, ...] = (
+        UiImprovement(
+            "ai-health",
+            "AI health indicator",
+            "Show Ready, Reconnecting, Downloading, or Needs attention.",
+            "P0",
+        ),
+        UiImprovement(
+            "model-progress",
+            "Model progress",
+            "Show model download/startup progress instead of silent waiting.",
+            "P0",
+        ),
+        UiImprovement(
+            "repair-setup",
+            "Repair setup button",
+            "One click to diagnose and fix local Forge/Ollama setup.",
+            "P0",
+        ),
+        UiImprovement(
+            "pr-flow",
+            "PR auto-check",
+            "Read GitHub CI failures and turn them into Forge tasks.",
+            "P1",
+        ),
+        UiImprovement(
+            "docker-cards",
+            "Docker doctor cards",
+            "Show containers, compose files, ports, and health plainly.",
+            "P1",
+        ),
+        UiImprovement(
+            "wiki-index",
+            "Searchable codebase wiki",
+            "Persist and search a Devin-style project map.",
+            "P1",
+        ),
+        UiImprovement(
+            "safe-mode",
+            "Tiny-change safe mode",
+            "When confidence is low, only allow small reviewable patches.",
+            "P1",
+        ),
+        UiImprovement(
+            "session-replay",
+            "Session replay",
+            "Explain every attempt, decision, and failure reason.",
+            "P2",
+        ),
+        UiImprovement(
+            "benchmarks",
+            "Quality benchmarks",
+            "Track success rate, regressions, and time to useful diff.",
+            "P2",
+        ),
+        UiImprovement(
+            "notifications",
+            "Desktop notifications",
+            "Tell the user when a patch is ready or runtime recovered.",
+            "P2",
+        ),
     )
     workflow_presets: tuple[UiWorkflowPreset, ...] = (
         UiWorkflowPreset(

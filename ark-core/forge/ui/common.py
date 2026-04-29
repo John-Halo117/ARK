@@ -143,33 +143,30 @@ def render_control_panel(
     )
     lines = [
         f"[{status}]",
-        f"AI status: {runtime_summary}",
-        f"Right now: {_stage_summary(str(machine.get('stage_label', 'idle')))}",
-        _pipeline_line(str(machine.get("stage", machine.get("stage_label", "idle")))),
-        f"Tool style: {_tool_profile_label(tool_profile)}",
-        f"Search style: {mode}",
-        f"Check depth: {test_mode}",
-        f"Context scope: {_context_label(context_level)}",
-        f"Safety bar: {_risk_threshold_label(float(machine.get('risk_threshold', DEFAULT_UI_STATE_CONFIG.risk_threshold)))}",
+        f"Now: {_stage_summary(str(machine.get('stage_label', 'idle')))}",
+        f"AI: {_short_runtime_label(runtime_summary)}",
+        f"Settings: {_tool_profile_label(tool_profile)} • {mode} • {test_mode}",
+        f"Scope: {_context_label(context_level)}",
+        _safety_line(machine),
     ]
     if record is not None:
         lines.extend([""])
         if isinstance(record, HistoryRecord):
             lines.extend(
                 [
-                    f"Selected result: {_history_status_label(record.status)}",
-                    f"Confidence: {_risk_label(record.risk)}",
-                    f"What happened: {record.detail or 'Saved result ready to inspect.'}",
+                    f"Result: {_history_status_label(record.status)}",
+                    f"Risk: {_risk_label(record.risk)}",
+                    f"Note: {record.detail or 'Saved result ready to inspect.'}",
                 ]
             )
         else:
             lines.extend(
                 [
-                    f"Selected Δ: {record.identifier}",
-                    f"Verification: {_candidate_status_label(record.status)}",
-                    f"Confidence: {_risk_label(record.risk)}",
-                    f"Size: {_count_label(record.hunk_count, 'change')} across {_count_label(len(record.files_touched), 'file')}",
-                    f"What Forge sees: {record.detail or 'Forge is still checking this option.'}",
+                    f"Option: {record.identifier}",
+                    f"Check: {_candidate_status_label(record.status)}",
+                    f"Risk: {_risk_label(record.risk)}",
+                    _candidate_size_line(record),
+                    f"Note: {record.detail or 'Forge is still checking this option.'}",
                 ]
             )
     if debug:
@@ -204,16 +201,17 @@ def render_status_strip(
     history_count: int,
     selected_label: str,
 ) -> str:
-    task = str(machine.get("task", "")).strip() or "No task loaded"
+    task = str(machine.get("task", "")).strip() or "No task yet"
     status = str(machine.get("status", "WAITING"))
     stage = _stage_summary(str(machine.get("stage_label", "idle")))
     mode = _mode_label(str(machine.get("mode", "AUTO")))
-    option_text = f"Live Δ={live_count}"
-    history_text = f"History={history_count}"
+    option_text = _count_label(live_count, "option")
+    history_text = _count_label(history_count, "saved run")
     return (
-        f"[{status}] {task}\n"
-        f"Now: {stage} | Search: {mode} | {option_text} | {history_text}\n"
-        f"AI: {runtime_summary} | Focus: {selected_label}"
+        f"{status}: {stage}\n"
+        f"Task: {task}\n"
+        f"{_short_runtime_label(runtime_summary)} • {mode} • "
+        f"{option_text} • {history_text} • {selected_label}"
     )
 
 
@@ -258,6 +256,36 @@ def tool_profiles() -> list[dict[str, Any]]:
     ]
 
 
+def improvement_plan() -> list[dict[str, str]]:
+    return [
+        {
+            "id": item.identifier,
+            "label": item.label,
+            "description": item.description,
+            "priority": item.priority,
+        }
+        for item in DEFAULT_UI_STATE_CONFIG.improvement_plan
+    ]
+
+
+def health_cards(
+    runtime: dict[str, object],
+    capabilities: list[CapabilityStatus],
+    *,
+    running: bool,
+) -> list[dict[str, str]]:
+    ai = _ai_health(runtime)
+    docker = _capability_card(capabilities, "Docker", "Docker")
+    mcp = _capability_card(capabilities, "MCP", "Local tools")
+    flow = {
+        "label": "Run state",
+        "status": "Working" if running else "Ready",
+        "detail": "Forge is running a task." if running else "Type a task to begin.",
+        "tone": "info" if running else "good",
+    }
+    return [ai, docker, mcp, flow]
+
+
 def build_codebase_wiki(repo_root: Path) -> list[dict[str, str]]:
     """Return bounded, layman-friendly project map cards for Forge UI surfaces."""
 
@@ -294,33 +322,21 @@ def build_tool_actions(
     docker = _capability_status(capabilities, "Docker")
     remote = _safe_git_output(repo_root, ("git", "remote", "get-url", "origin"))
     github_text = "connected" if "github.com" in remote.lower() else "not connected"
-    actions = [
+    replacements = {
+        "check-pr": f"GitHub {github_text}. Check CI and suggest a fix.",
+        "docker-doctor": f"Docker is {docker}. Explain or repair it.",
+    }
+    return [
         {
-            "label": "Fix code",
-            "description": "Find the smallest safe code change and verify it.",
-            "task": "Fix the highest-priority failing code path, run checks, and show me the safest patch.",
-            "files": "",
-        },
-        {
-            "label": "Check PR",
-            "description": f"Review GitHub status ({github_text}) and propose a safe fix.",
-            "task": "Check the current GitHub PR and failing checks, then prepare the safest local fix.",
-            "files": ".github",
-        },
-        {
-            "label": "Explain repo",
-            "description": "Build a Devin-style codebase map in plain English.",
-            "task": "Create a concise codebase wiki: main areas, important flows, risks, and where to edit safely.",
-            "files": "",
-        },
-        {
-            "label": "Docker help",
-            "description": f"Inspect Docker setup ({docker}) and suggest safe edits.",
-            "task": "Check the Docker setup, explain what is safe to change, and prepare any needed Dockerfile or compose fix.",
-            "files": "Dockerfile docker-compose.yml compose.yml compose.yaml",
-        },
+            "id": item.identifier,
+            "label": item.label,
+            "description": replacements.get(item.identifier, item.description),
+            "task": item.task,
+            "files": item.files,
+            "category": item.category,
+        }
+        for item in DEFAULT_UI_STATE_CONFIG.action_templates
     ]
-    return actions
 
 
 def render_command_legend() -> str:
@@ -374,9 +390,15 @@ def render_test_panel(
         return "Checks\n\nNo result selected yet."
     if isinstance(record, HistoryRecord):
         verify = dict(record.payload.get("metrics", {}).get("verify", {}))
+        tests_ok = bool(
+            verify.get(
+                "tests_ok",
+                record.payload.get("metrics", {}).get("tests", False),
+            )
+        )
         lines = [
             f"Result: {record.status}",
-            f"tests_ok: {_status_icon(bool(verify.get('tests_ok', record.payload.get('metrics', {}).get('tests', False))))}",
+            f"tests_ok: {_status_icon(tests_ok)}",
             f"synth_ok: {_status_icon(bool(verify.get('synth_ok', False)))}",
             f"lint_ok: {_status_icon(bool(verify.get('lint_ok', False)))}",
             f"types_ok: {_status_icon(bool(verify.get('types_ok', False)))}",
@@ -463,7 +485,10 @@ def _history_record_from_payload(
     file_count = len(files_touched)
     status = _history_status_label(str(payload.get("status", "unknown")))
     risk = _risk_label(float(payload.get("risk", 0.0)))
-    label = f"{status} • {risk} • {_count_label(file_count, 'file')} • {payload.get('identifier', 'task')}"
+    label = (
+        f"{status} • {risk} • {_count_label(file_count, 'file')} • "
+        f"{payload.get('identifier', 'task')}"
+    )
     return HistoryRecord(
         label=label,
         identifier=str(payload.get("identifier", result_path.stem)),
@@ -567,6 +592,71 @@ def _risk_threshold_label(value: float) -> str:
     if value <= 0.65:
         return "Flexible: allows more uncertain changes for review"
     return "Loose: show more risky options, review carefully"
+
+
+def _safety_line(machine: dict[str, Any]) -> str:
+    value = float(
+        machine.get("risk_threshold", DEFAULT_UI_STATE_CONFIG.risk_threshold)
+    )
+    return f"Safety: {_risk_threshold_label(value)}"
+
+
+def _candidate_size_line(record: CandidateRecord) -> str:
+    return (
+        f"Size: {_count_label(record.hunk_count, 'change')} across "
+        f"{_count_label(len(record.files_touched), 'file')}"
+    )
+
+
+def _short_runtime_label(runtime_summary: str) -> str:
+    lower = runtime_summary.lower()
+    if "not detected" in lower:
+        return "AI reconnecting"
+    if "(models: none)" in lower:
+        return "AI downloading model"
+    if " using " in runtime_summary:
+        model = runtime_summary.rsplit(" using ", 1)[-1]
+        return f"AI ready: {model}"
+    return runtime_summary
+
+
+def _ai_health(runtime: dict[str, object]) -> dict[str, str]:
+    ready = bool(runtime.get("ready"))
+    phase = str(runtime.get("phase", "starting"))
+    model = str(runtime.get("model") or "")
+    if ready:
+        return {
+            "label": "AI health",
+            "status": "Ready",
+            "detail": model or "Model ready",
+            "tone": "good",
+        }
+    if phase == "installing":
+        return {
+            "label": "AI health",
+            "status": "Downloading",
+            "detail": "Forge is preparing a coding model.",
+            "tone": "warn",
+        }
+    return {
+        "label": "AI health",
+        "status": "Reconnecting",
+        "detail": "Forge is waking Ollama in the background.",
+        "tone": "warn",
+    }
+
+
+def _capability_card(
+    capabilities: list[CapabilityStatus], name: str, label: str
+) -> dict[str, str]:
+    status = _capability_status(capabilities, name)
+    tone = "good" if status in {"ready", "configured"} else "warn"
+    detail = "Ready" if tone == "good" else "Needs setup or not checked"
+    for capability in capabilities:
+        if capability.name.lower() == name.lower():
+            detail = capability.detail
+            break
+    return {"label": label, "status": status.title(), "detail": detail, "tone": tone}
 
 
 def _coverage_line(delta: float) -> str:
