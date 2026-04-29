@@ -124,21 +124,25 @@ def ensure_runtime_ready(
         if launched is not None:
             actions.append("Forge started the local AI service in the background.")
             nerd_details.append(launched)
-            status = _poll_runtime(
-                preferred_url=preferred_url,
-                preferred_model=preferred_model,
-                config=config,
-                actions=tuple(actions),
-                nerd_details=tuple(nerd_details),
-                require_model=False,
-            )
+        else:
+            actions.append("Forge could not start Ollama automatically.")
+            nerd_details.append("No usable Ollama command was found.")
+        status = _poll_runtime(
+            preferred_url=preferred_url,
+            preferred_model=preferred_model,
+            config=config,
+            actions=tuple(actions),
+            nerd_details=tuple(nerd_details),
+            require_model=False,
+        )
     if status.endpoint is not None and status.model is None and config.auto_pull_model:
-        launched = _launch_background_command(
-            config.ollama_pull_command_prefix + (config.bootstrap_model,)
+        launched = _pull_first_available(
+            config=config,
+            model=preferred_model or config.bootstrap_model,
         )
         if launched is not None:
             actions.append(
-                f"Forge is downloading {config.bootstrap_model} in the background."
+                "Forge is downloading a coding model in the background."
             )
             nerd_details.append(launched)
             status = _poll_runtime(
@@ -149,6 +153,22 @@ def ensure_runtime_ready(
                 nerd_details=tuple(nerd_details),
                 require_model=True,
             )
+        elif config.fallback_bootstrap_model != config.bootstrap_model:
+            fallback = _pull_first_available(
+                config=config,
+                model=config.fallback_bootstrap_model,
+            )
+            if fallback is not None:
+                actions.append("Forge is downloading a fallback coding model.")
+                nerd_details.append(fallback)
+                status = _poll_runtime(
+                    preferred_url=preferred_url,
+                    preferred_model=preferred_model,
+                    config=config,
+                    actions=tuple(actions),
+                    nerd_details=tuple(nerd_details),
+                    require_model=True,
+                )
     return detect_runtime_status(
         preferred_url=preferred_url,
         preferred_model=preferred_model,
@@ -197,6 +217,25 @@ def _launch_first_available(
         if launched is not None:
             return launched
     return None
+
+
+def _pull_first_available(*, config: RuntimeBootstrapConfig, model: str) -> str | None:
+    prefixes = (*config.ollama_pull_command_prefixes, config.ollama_pull_command_prefix)
+    commands = tuple(prefix + (model,) for prefix in _dedupe_commands(prefixes))
+    return _launch_first_available(commands)
+
+
+def _dedupe_commands(
+    commands: tuple[tuple[str, ...], ...],
+) -> tuple[tuple[str, ...], ...]:
+    seen: set[tuple[str, ...]] = set()
+    unique: list[tuple[str, ...]] = []
+    for command in commands:
+        if command in seen:
+            continue
+        seen.add(command)
+        unique.append(command)
+    return tuple(unique)
 
 
 def _launch_background_command(command: tuple[str, ...]) -> str | None:

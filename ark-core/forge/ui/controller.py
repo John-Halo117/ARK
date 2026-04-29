@@ -6,6 +6,7 @@ from collections import deque
 import json
 from pathlib import Path
 import threading
+import time
 from typing import Any, Callable
 
 from ..runtime.bootstrap import (
@@ -13,7 +14,11 @@ from ..runtime.bootstrap import (
     detect_runtime_status,
     ensure_runtime_ready,
 )
-from ..runtime.config import DEFAULT_UI_STATE_CONFIG, UiToolProfile
+from ..runtime.config import (
+    DEFAULT_RUNTIME_BOOTSTRAP_CONFIG,
+    DEFAULT_UI_STATE_CONFIG,
+    UiToolProfile,
+)
 from ..runtime.capabilities import CapabilityStatus, detect_capabilities
 from ..transform.apply import (
     apply_unified_diff,
@@ -124,11 +129,13 @@ class ForgeOperatorController:
         self._cached_wiki: list[dict[str, Any]] = []
         self._cached_tool_actions: list[dict[str, Any]] = []
         self._runtime_boot_thread: threading.Thread | None = None
+        self._runtime_watchdog_thread: threading.Thread | None = None
         restored_logs = bool(self.logs)
         self.refresh_runtime(log_runtime=True, auto_boot=True)
         self.refresh_history()
         if not restored_logs:
             self.log("Forge ready. Type a task and press Start.")
+        self._start_runtime_watchdog()
 
     def refresh_runtime(
         self,
@@ -195,6 +202,29 @@ class ForgeOperatorController:
             self.log(detail)
         self.log(status.message if not status.ready else "Local AI is ready.")
         self.persist_session()
+
+    def _start_runtime_watchdog(self) -> None:
+        if self._runtime_watchdog_thread is not None:
+            return
+        self._runtime_watchdog_thread = threading.Thread(
+            target=self._runtime_watchdog_worker,
+            daemon=True,
+        )
+        self._runtime_watchdog_thread.start()
+
+    def _runtime_watchdog_worker(self) -> None:
+        config = DEFAULT_RUNTIME_BOOTSTRAP_CONFIG
+        for _ in range(config.watchdog_checks):
+            time.sleep(config.watchdog_interval_s)
+            status = (self.runtime_status_probe or detect_runtime_status)(
+                preferred_url=self.preferred_url,
+                preferred_model=self.preferred_model,
+            )
+            was_ready = self.runtime_status.ready
+            self._apply_runtime_status(status, log_runtime=False)
+            if was_ready and not status.ready:
+                self.log("Local AI disconnected; Forge is waking it back up.")
+                self._start_runtime_boot(force=True)
 
     def refresh_capabilities(self) -> None:
         detector = self.capability_detector or detect_capabilities

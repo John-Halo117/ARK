@@ -113,13 +113,23 @@ class RuntimeBootstrapConfig:
     """Bounded local-runtime startup defaults for low-friction Forge boot."""
 
     detect_timeout_s: int = 5
-    poll_attempts: int = 12
+    poll_attempts: int = 36
     poll_interval_s: float = 1.0
+    watchdog_checks: int = 240
+    watchdog_interval_s: float = 15.0
     auto_start_ollama: bool = True
     auto_pull_model: bool = True
-    bootstrap_model: str = "qwen2.5-coder:7b"
-    ollama_start_commands: tuple[tuple[str, ...], ...] = (("ollama", "serve"),)
+    bootstrap_model: str = "qwen3-coder:30b"
+    fallback_bootstrap_model: str = "qwen2.5-coder:7b"
+    ollama_start_commands: tuple[tuple[str, ...], ...] = (
+        ("ollama", "serve"),
+        ("ollama.exe", "serve"),
+    )
     ollama_pull_command_prefix: tuple[str, ...] = ("ollama", "pull")
+    ollama_pull_command_prefixes: tuple[tuple[str, ...], ...] = (
+        ("ollama", "pull"),
+        ("ollama.exe", "pull"),
+    )
 
 
 @dataclass(frozen=True)
