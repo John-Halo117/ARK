@@ -142,7 +142,8 @@ def ensure_runtime_ready(
         )
         if launched is not None:
             actions.append(
-                "Forge is downloading a coding model in the background."
+                f"Forge is downloading {preferred_model or config.bootstrap_model} "
+                "in the background."
             )
             nerd_details.append(launched)
             status = _poll_runtime(

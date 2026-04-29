@@ -88,7 +88,11 @@ class ProjectMapConfig:
     command_timeout_s: int = 3
     max_files_per_area: int = 300
     highlighted_roots: tuple[tuple[str, str, str], ...] = (
-        ("ark-core/forge", "Forge engine", "Self-coding engine, UI, runtime, and gates"),
+        (
+            "ark-core/forge",
+            "Forge engine",
+            "Self-coding engine, UI, runtime, and gates",
+        ),
         ("ark-core/tests", "Safety tests", "Checks that keep Forge behavior stable"),
         ("docker", "Docker setup", "Container and local service helpers"),
         ("scripts", "Launch scripts", "Click/open and setup helpers"),

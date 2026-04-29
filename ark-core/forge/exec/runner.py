@@ -17,7 +17,11 @@ def project_python(tool_root: Path) -> str:
     """Prefer the project-local Python environment when present."""
 
     venv_python = tool_root / ".venv" / "bin" / "python"
-    return venv_python.as_posix() if venv_python.exists() else sys.executable
+    return (
+        venv_python.as_posix()
+        if venv_python.exists()
+        else Path(sys.executable).as_posix()
+    )
 
 
 def validated_command(command: list[str] | tuple[str, ...]) -> list[str]:

@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ForgeCmd = Join-Path $RootDir "forge.cmd"
+# forge.cmd performs Python resolution with: import sys; print(sys.executable)
 
 if (-not (Test-Path $ForgeCmd)) {
     Write-Error "Forge launcher is missing: $ForgeCmd"

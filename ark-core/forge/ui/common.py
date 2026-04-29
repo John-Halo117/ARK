@@ -144,6 +144,7 @@ def render_control_panel(
     lines = [
         f"[{status}]",
         f"Now: {_stage_summary(str(machine.get('stage_label', 'idle')))}",
+        _pipeline_line(str(machine.get("stage", "idle"))),
         f"AI: {_short_runtime_label(runtime_summary)}",
         f"Settings: {_tool_profile_label(tool_profile)} • {mode} • {test_mode}",
         f"Scope: {_context_label(context_level)}",
@@ -162,6 +163,7 @@ def render_control_panel(
         else:
             lines.extend(
                 [
+                    f"Selected Δ: {record.identifier}",
                     f"Option: {record.identifier}",
                     f"Check: {_candidate_status_label(record.status)}",
                     f"Risk: {_risk_label(record.risk)}",
@@ -210,7 +212,7 @@ def render_status_strip(
     return (
         f"{status}: {stage}\n"
         f"Task: {task}\n"
-        f"{_short_runtime_label(runtime_summary)} • {mode} • "
+        f"{_short_runtime_label(runtime_summary)} • {mode} • Live Δ={live_count} • "
         f"{option_text} • {history_text} • {selected_label}"
     )
 
@@ -595,9 +597,7 @@ def _risk_threshold_label(value: float) -> str:
 
 
 def _safety_line(machine: dict[str, Any]) -> str:
-    value = float(
-        machine.get("risk_threshold", DEFAULT_UI_STATE_CONFIG.risk_threshold)
-    )
+    value = float(machine.get("risk_threshold", DEFAULT_UI_STATE_CONFIG.risk_threshold))
     return f"Safety: {_risk_threshold_label(value)}"
 
 
@@ -1042,7 +1042,10 @@ def _bounded_file_count(path: Path) -> int:
     for child in path.rglob("*"):
         if count >= DEFAULT_PROJECT_MAP_CONFIG.max_files_per_area:
             return count
-        if not child.is_file() or child.suffix not in DEFAULT_PROJECT_MAP_CONFIG.text_suffixes:
+        if (
+            not child.is_file()
+            or child.suffix not in DEFAULT_PROJECT_MAP_CONFIG.text_suffixes
+        ):
             continue
         count += 1
     return count

@@ -476,9 +476,7 @@ def launch(
                 client, runtime_summary = _build_client_from_request(request)
                 self.call_from_thread(self._set_runtime_summary, runtime_summary)
                 if client is None or not getattr(client, "enabled", True):
-                    self.call_from_thread(
-                        self._set_stage, "WAITING", "runtime warming"
-                    )
+                    self.call_from_thread(self._set_stage, "WAITING", "runtime warming")
                     self.call_from_thread(
                         self._log, _runtime_doctor_message(runtime_summary)
                     )
@@ -523,7 +521,10 @@ def launch(
                     )
                     break
                 self.call_from_thread(self._record_result, result)
-                if not request.auto_loop or result["status"] in {"promote", "manual_review"}:
+                if not request.auto_loop or result["status"] in {
+                    "promote",
+                    "manual_review",
+                }:
                     break
             self.call_from_thread(self._set_running_state, False)
             if self.stop_requested:

@@ -392,7 +392,10 @@ class BrowserState:
                 break
             with self._lock:
                 self.controller.record_result(result)
-            if not request.auto_loop or result["status"] in {"promote", "manual_review"}:
+            if not request.auto_loop or result["status"] in {
+                "promote",
+                "manual_review",
+            }:
                 break
         with self._lock:
             self.controller.set_running_state(False)
@@ -417,7 +420,7 @@ class BrowserState:
             return self._process_request(request, client)
         except Exception as exc:  # pragma: no cover - safety net for interactive mode
             with self._lock:
-                self.controller.set_stage("WAITING", "run needs review")
+                self.controller.set_stage("WAITING", "run failed")
                 self.controller.log(
                     f"Run failed; moved to manual review ({type(exc).__name__})."
                 )
@@ -1135,13 +1138,16 @@ class _LegacyBrowserState:
                 )
             except Exception as exc:  # pragma: no cover - interactive safety net
                 with self._lock:
-                    self._set_stage("WAITING", "run needs review")
+                    self._set_stage("WAITING", "run failed")
                     self._log(
                         f"Run failed; moved to manual review ({type(exc).__name__})."
                     )
                 break
             self.record_result(result)
-            if not request.auto_loop or result["status"] in {"promote", "manual_review"}:
+            if not request.auto_loop or result["status"] in {
+                "promote",
+                "manual_review",
+            }:
                 break
         with self._lock:
             self._set_running_state(False)

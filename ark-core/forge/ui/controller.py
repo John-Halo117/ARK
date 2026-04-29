@@ -235,7 +235,9 @@ class ForgeOperatorController:
             item.as_dict() for item in self.capabilities
         ]
         self._cached_wiki = build_codebase_wiki(self.repo_root)
-        self._cached_tool_actions = build_tool_actions(self.repo_root, self.capabilities)
+        self._cached_tool_actions = build_tool_actions(
+            self.repo_root, self.capabilities
+        )
 
     def refresh_history(self) -> None:
         history_loader = self.history_loader or load_history_records
@@ -495,9 +497,7 @@ class ForgeOperatorController:
         self.controls["context_level"] = updated
         self.machine_state["context_level"] = updated
         self.persist_session()
-        self.log(
-            f"Context scope set to {_friendly_context(updated)}."
-        )
+        self.log(f"Context scope set to {_friendly_context(updated)}.")
         return True
 
     def set_test_mode(self, value: str) -> bool:
