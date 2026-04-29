@@ -4,8 +4,12 @@ If you want the self-coding part of ARK, start here and ignore the deeper docs.
 
 ## The easiest way to open Forge
 
-- In WSL, Git Bash, or a Unix-like terminal: `./forge`
-- In any terminal if you want the browser app: `./forge --desktop`
+- Browser app: `./forge-app`
+- App status: `./forge-app --status`
+- Stop the browser app: `./forge-app --stop`
+- Remove stale launcher files: `./forge-app --cleanup`
+- Terminal UI: `./forge`
+- Browser app without launcher helper: `./forge --desktop`
 - On Linux/Arch if you want a real app launcher: `./install-forge-arch.sh`
 - In PowerShell: `.\forge.ps1`
 - In Command Prompt: `forge.cmd`
@@ -57,7 +61,8 @@ That installs:
 - a user-local icon in `~/.local/share/icons`
 
 It does **not** create any systemd unit or background service.
-Forge starts only when you open it. Use the Forge `Shutdown` button when you are done.
+Forge starts only when you open it. Use the Forge `Shutdown` button or
+`forge-app --stop` when you are done.
 
 Quick controls:
 
@@ -106,15 +111,14 @@ If you want the old CLI flow instead of the TUI:
 
 ## If Forge says Ollama is missing
 
-Run these first:
+Forge tries to wake Ollama and pull the coding model automatically. To check it
+manually, run:
 
 ```bash
-ollama serve
-ollama pull qwen3-coder:30b
 ./forge --check
 ```
 
-If the browser app shows `RUNTIME MISSING`, use the Runtime Doctor panel and then press `Check Runtime`.
+Use the AI health card or Nerd Stuff panel only if you want exact diagnostics.
 
 ## What Forge does
 

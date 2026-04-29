@@ -7,6 +7,9 @@ set "FORGE_PORT=4765"
 set "FORGE_URL=http://127.0.0.1:%FORGE_PORT%/"
 
 if /I "%~1"=="--desktop-server" goto desktop_server
+if /I "%~1"=="--status" goto status
+if /I "%~1"=="--stop" goto stop_desktop
+if /I "%~1"=="--cleanup" goto cleanup
 if "%~1"=="" goto launch_desktop
 goto run
 
@@ -48,6 +51,22 @@ exit /b 1
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":%FORGE_PORT% .*LISTENING"') do (
   taskkill /PID %%P /F >nul 2>nul
 )
+exit /b 0
+
+:status
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$url = '%FORGE_URL%api/state';" ^
+  "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 -Uri $url | Out-Null; Write-Host 'Forge is running at %FORGE_URL%'; exit 0 } catch { Write-Host 'Forge is not running.'; exit 1 }"
+exit /b %errorlevel%
+
+:stop_desktop
+call :stop_desktop_listener
+echo Stopped Forge browser app if it was running.
+exit /b 0
+
+:cleanup
+call :stop_desktop_listener
+echo Cleaned Forge desktop listener on %FORGE_PORT%.
 exit /b 0
 
 :desktop_server

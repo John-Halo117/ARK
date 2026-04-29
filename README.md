@@ -12,22 +12,30 @@ repo layout.
 
 If you only want the self-coding part of ARK, use Forge.
 
-- WSL, Git Bash, or Linux/macOS terminal: `./forge`
-- Browser app: `./forge --desktop`
-- Linux/Arch app install: `./install-forge-arch.sh`
-- PowerShell: `.\forge.ps1`
-- Command Prompt: `forge.cmd`
-- One-click Windows launcher: `Forge App.cmd`
-- Runtime check: `./forge --check`
+Forge is local-first and user-local. It creates no systemd service, no hidden
+daemon, and no cloud account. Open it when you need it; stop it when you are
+done.
+
+| Action | Command |
+| --- | --- |
+| Browser app | `./forge-app` |
+| App status | `./forge-app --status` |
+| Stop app | `./forge-app --stop` |
+| Clean stale launcher files | `./forge-app --cleanup` |
+| Terminal TUI | `./forge` |
+| Runtime check | `./forge --check` |
+| Linux/Arch app install | `./install-forge-arch.sh` |
+| Windows one-click launcher | `Forge App.cmd` |
 
 The fastest beginner path is:
 
-1. Double-click `Forge App.cmd` on Windows, or run `./forge --desktop`.
+1. Double-click `Forge App.cmd` on Windows, or run `./forge-app`.
 2. On Arch Linux, run `./install-forge-arch.sh` once if you want Forge in your app launcher.
 3. Type the task into the Forge composer.
 4. Press `Run`, inspect the live diff/tests/redteam panels, then accept or reject.
 
-The Linux app install is user-local only. It creates no systemd service. Use the Forge Shutdown button when you are done with the browser app.
+The Linux app install is user-local only. Use the Forge Shutdown button or
+`forge-app --stop` when you are done with the browser app.
 
 There is also a short guide at [`FORGE_START_HERE.md`](FORGE_START_HERE.md).
 
