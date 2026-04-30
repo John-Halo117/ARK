@@ -1,6 +1,8 @@
 package meta
 
 import (
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,14 +16,18 @@ const (
 )
 
 type Rule struct {
-	ID     string         `json:"id"`
-	When   string         `json:"when"`
-	Patch  map[string]any `json:"patch"`
-	Reason string         `json:"reason"`
+	ID       string         `json:"id" yaml:"id"`
+	When     string         `json:"when" yaml:"when"`
+	If       string         `json:"if" yaml:"if"`
+	Patch    map[string]any `json:"patch" yaml:"patch"`
+	Prune    bool           `json:"prune" yaml:"prune"`
+	Reweight float64        `json:"reweight" yaml:"reweight"`
+	Merge    bool           `json:"merge" yaml:"merge"`
+	Reason   string         `json:"reason" yaml:"reason"`
 }
 
 type Table struct {
-	Rules []Rule `json:"rules"`
+	Rules []Rule `json:"rules" yaml:"rules"`
 }
 
 type Engine struct {
@@ -35,12 +41,38 @@ func NewEngine(table Table) (*Engine, error) {
 		return nil, core.NewFailure("META_TABLE_TOO_LARGE", "meta table exceeds bounded rule count", map[string]any{"max_rules": MaxRules}, false)
 	}
 	for i := 0; i < len(table.Rules) && i < MaxRules; i++ {
+		table.Rules[i] = normalizeRule(table.Rules[i], i)
 		rule := table.Rules[i]
 		if rule.ID == "" || rule.When == "" {
 			return nil, core.NewFailure("META_RULE_INVALID", "meta rule requires id and when", map[string]any{"index": i}, false)
 		}
 	}
 	return &Engine{table: table, applied: map[string]core.DeltaDef{}}, nil
+}
+
+func normalizeRule(rule Rule, index int) Rule {
+	if rule.ID == "" {
+		rule.ID = "meta-rule-" + strconv.Itoa(index+1)
+	}
+	if rule.When == "" && rule.If != "" {
+		rule.When = rule.If
+	}
+	if rule.Patch == nil {
+		rule.Patch = map[string]any{}
+	}
+	if rule.Prune {
+		rule.Patch["prune"] = true
+	}
+	if rule.Reweight != 0 {
+		rule.Patch["reweight"] = rule.Reweight
+	}
+	if rule.Merge {
+		rule.Patch["merge"] = true
+	}
+	if rule.Reason == "" {
+		rule.Reason = rule.When
+	}
+	return rule
 }
 
 func (e *Engine) Health() core.HealthStatus {
@@ -108,6 +140,67 @@ func metaRuleMatches(when string, logs []core.StepLog, result core.Result) bool 
 			}
 		}
 		return false
+	default:
+		return metricRuleMatches(when, result)
+	}
+}
+
+func metricRuleMatches(when string, result core.Result) bool {
+	ops := []string{">=", "<=", ">", "<", "="}
+	for i := 0; i < len(ops); i++ {
+		op := ops[i]
+		parts := strings.SplitN(when, op, 2)
+		if len(parts) != 2 {
+			continue
+		}
+		left := strings.TrimSpace(parts[0])
+		right := strings.TrimSpace(parts[1])
+		actual, ok := numericOutput(left, result)
+		if !ok {
+			return false
+		}
+		expected, err := strconv.ParseFloat(right, 64)
+		if err != nil {
+			return false
+		}
+		return compareFloat(actual, expected, op)
+	}
+	return false
+}
+
+func numericOutput(name string, result core.Result) (float64, bool) {
+	value, ok := result.Output[strings.TrimSpace(name)]
+	if !ok {
+		return 0, false
+	}
+	switch typed := value.(type) {
+	case float64:
+		return typed, true
+	case float32:
+		return float64(typed), true
+	case int:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	default:
+		return 0, false
+	}
+}
+
+func compareFloat(actual float64, expected float64, op string) bool {
+	switch op {
+	case ">=":
+		return actual >= expected
+	case "<=":
+		return actual <= expected
+	case ">":
+		return actual > expected
+	case "<":
+		return actual < expected
+	case "=":
+		return actual == expected
 	default:
 		return false
 	}

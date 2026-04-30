@@ -3,6 +3,9 @@
 `REDTEAM.md` is the canonical adversarial-enforcement source. It defines what
 must be tested before trust or promotion claims are accepted.
 
+The higher-level operating posture lives in `docs/MISSION_GRADE_RULES.md`.
+Machine-readable invariants live in `config/system_invariants.json`.
+
 ## Core rule
 
 No trust claim is valid unless Red Team fails to break it.

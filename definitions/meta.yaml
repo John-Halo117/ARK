@@ -4,3 +4,12 @@ rules:
     patch:
       last_success: record
     reason: record successful action outcomes as bounded meta definitions
+  - id: prune-low-success-rate
+    if: success_rate < 0.3
+    prune: true
+  - id: reweight-high-success-rate
+    if: success_rate > 0.8
+    reweight: 0.1
+  - id: merge-repeated-conflict
+    if: repeated_conflict > 3
+    merge: true

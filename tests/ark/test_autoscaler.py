@@ -145,3 +145,29 @@ class TestAutoscaler:
             await self.scaler.terminate_instance("opencode")
 
         assert self.scaler.service_instances["opencode"] == ["c1"]
+
+    # ---- signal handlers ----
+
+    @pytest.mark.asyncio
+    async def test_on_queue_depth_signal_updates_demand_and_triggers_scaling(self):
+        with patch.object(self.scaler, "check_scaling", new_callable=AsyncMock) as mock_scale:
+            await self.scaler._on_queue_depth_signal("opencode", {"depth": 17})
+        assert self.scaler.service_demand["opencode"] == 17.0
+        mock_scale.assert_awaited_once_with("opencode")
+
+    @pytest.mark.asyncio
+    async def test_on_queue_depth_signal_rejects_invalid_depth(self):
+        with patch.object(self.scaler, "check_scaling", new_callable=AsyncMock) as mock_scale:
+            await self.scaler._on_queue_depth_signal("opencode", {"depth": -1})
+        assert "opencode" not in self.scaler.service_demand
+        mock_scale.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_on_latency_signal_updates_latency(self):
+        await self.scaler._on_latency_signal("openwolf", {"latency_ms": 450})
+        assert self.scaler.service_latency["openwolf"] == 450.0
+
+    @pytest.mark.asyncio
+    async def test_on_latency_signal_rejects_invalid_latency(self):
+        await self.scaler._on_latency_signal("openwolf", {"latency_ms": "fast"})
+        assert "openwolf" not in self.scaler.service_latency

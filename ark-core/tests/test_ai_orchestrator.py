@@ -41,3 +41,6 @@ def test_orchestrator_dry_run(project_root: Path, tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload[0]["status"] == "dry_run"
+    assert payload[0]["engine"] == "forge"
+    assert payload[0]["mode"] in {"SIMPLE", "BISECT", "TRISECT"}
+    assert "result" in payload[0]["artifacts"]

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Composio compatibility wrapper over unified Aider agent."""
+"""Composio compatibility wrapper over Forge-native local tool runtime."""
 
-from agents.aider.agent import AiderAgent
+from agents.forge_native.agent import ForgeNativeAgent
 
 
-class ComposioBridge(AiderAgent):
+class ComposioBridge(ForgeNativeAgent):
     def __init__(self):
         super().__init__("composio")

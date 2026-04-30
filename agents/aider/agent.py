@@ -43,7 +43,7 @@ logging.basicConfig(
 logger = logging.getLogger("AiderAgent")
 
 MAX_AGENT_HEARTBEATS = 100_000
-MAX_AGENT_MESSAGES = 100_000
+MAX_AGENT_MESSAGES = 1_000
 MAX_AGENT_SUBSCRIBE_IDLE_SECONDS = 30.0
 
 PROFILE_CAPABILITIES: Dict[str, List[str]] = {
@@ -170,16 +170,23 @@ class AiderAgent:
         max_messages: int = MAX_AGENT_MESSAGES,
         idle_timeout_seconds: float = MAX_AGENT_SUBSCRIBE_IDLE_SECONDS,
     ):
+        if max_messages <= 0:
+            raise ValueError("max_messages must be greater than zero")
+        if idle_timeout_seconds <= 0:
+            raise ValueError("idle_timeout_seconds must be greater than zero")
         try:
             sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
-            processed = 0
             bounded_messages = max(0, min(max_messages, MAX_AGENT_MESSAGES))
             bounded_idle = max(0.001, min(idle_timeout_seconds, MAX_AGENT_SUBSCRIBE_IDLE_SECONDS))
-            while processed < bounded_messages:
+            for _ in range(bounded_messages):
                 try:
                     msg = await asyncio.wait_for(sub.messages.__anext__(), timeout=bounded_idle)
-                except (asyncio.TimeoutError, StopAsyncIteration):
-                    break
+                except asyncio.TimeoutError:
+                    logger.info("Subscription idle timeout after %.2fs", bounded_idle)
+                    return
+                except StopAsyncIteration:
+                    logger.info("Subscription stream closed")
+                    return
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     payload = self.contracts.materialize_payload(
@@ -191,9 +198,9 @@ class AiderAgent:
                     result = await self.handle_capability(capability, params)
                     await self._publish_nats(self.js, reply_subject(request_id), result, "agent.reply")
                     self.request_count += 1
-                    processed += 1
                 except Exception as exc:
                     logger.error("Error processing call: %s", exc)
+            logger.info("Subscription message cap reached: %s", bounded_messages)
         except NATSError as exc:
             logger.error("Subscription error: %s", exc)
 

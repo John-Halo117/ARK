@@ -2,7 +2,8 @@
 
 `TODO_TIERS.md` is the canonical governance source for Scope/Todo/Priority
 classification. Scripts and CI should read the machine version from
-`config/tiering_rules.json`.
+`config/tiering_rules.json`. For the broader operating doctrine, load
+`docs/MISSION_GRADE_RULES.md` and `config/operating_rules.json`.
 
 ## Tier model
 
