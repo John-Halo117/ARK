@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -29,7 +28,7 @@ func NewRedisClient(addr string, timeout time.Duration) (*RedisClient, error) {
 func (c *RedisClient) Close() error { return c.conn.Close() }
 
 func (c *RedisClient) Ping() error {
-	resp, err := c.Cmd("PING")
+	resp, err := c.cmd("PING")
 	if err != nil {
 		return err
 	}
@@ -40,7 +39,7 @@ func (c *RedisClient) Ping() error {
 }
 
 func (c *RedisClient) Get(key string) (string, bool, error) {
-	resp, err := c.Cmd("GET", key)
+	resp, err := c.cmd("GET", key)
 	if err != nil {
 		if errors.Is(err, errRedisNil) {
 			return "", false, nil
@@ -51,7 +50,7 @@ func (c *RedisClient) Get(key string) (string, bool, error) {
 }
 
 func (c *RedisClient) Set(key, value string) error {
-	resp, err := c.Cmd("SET", key, value)
+	resp, err := c.cmd("SET", key, value)
 	if err != nil {
 		return err
 	}
@@ -61,27 +60,8 @@ func (c *RedisClient) Set(key, value string) error {
 	return nil
 }
 
-func (c *RedisClient) SetNXEX(key, value string, ttlSeconds int) (bool, error) {
-	resp, err := c.Cmd("SET", key, value, "NX", "EX", strconv.Itoa(ttlSeconds))
-	if err != nil {
-		if errors.Is(err, errRedisNil) {
-			return false, nil
-		}
-		return false, err
-	}
-	if resp == "OK" {
-		return true, nil
-	}
-	return false, nil
-}
-
-func (c *RedisClient) Del(key string) error {
-	_, err := c.Cmd("DEL", key)
-	return err
-}
-
 func (c *RedisClient) Incr(key string) (uint64, error) {
-	resp, err := c.Cmd("INCR", key)
+	resp, err := c.cmd("INCR", key)
 	if err != nil {
 		return 0, err
 	}
@@ -94,7 +74,7 @@ func (c *RedisClient) Incr(key string) (uint64, error) {
 
 var errRedisNil = errors.New("redis nil")
 
-func (c *RedisClient) Cmd(parts ...string) (string, error) {
+func (c *RedisClient) cmd(parts ...string) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -130,21 +110,14 @@ func (c *RedisClient) Cmd(parts ...string) (string, error) {
 		if sz == -1 {
 			return "", errRedisNil
 		}
-		buf := make([]byte, sz)
-		if _, err := io.ReadFull(c.rw, buf); err != nil {
+		buf := make([]byte, sz+2)
+		if _, err := c.rw.Read(buf); err != nil {
 			return "", err
 		}
-		trail := make([]byte, 2)
-		if _, err := io.ReadFull(c.rw, trail); err != nil {
-			return "", err
-		}
-		return string(buf), nil
+		return string(buf[:sz]), nil
 	case '-':
 		if strings.HasPrefix(line, "-ERR") {
 			return "", errors.New(strings.TrimSpace(line[4:]))
-		}
-		if strings.Contains(line, "nil") {
-			return "", errRedisNil
 		}
 		return "", errors.New(line[1:])
 	default:

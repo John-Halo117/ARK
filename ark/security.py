@@ -7,7 +7,6 @@ they can be used across the gateway, agents, and emitters without pulling in
 heavy framework dependencies.
 """
 
-import hashlib
 import hmac
 import html
 import logging
@@ -15,9 +14,6 @@ import os
 import re
 import secrets
 import time
-from collections import defaultdict
-from datetime import datetime, timezone
-from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from aiohttp import web

@@ -2,6 +2,51 @@
 
 **A production-grade, Gordon-deployed, NATS-first intelligent operating system.**
 
+This workspace now also carries a canonical truth-spine and governance scaffold
+under [`ark-core`](ark-core/README.md). That area holds the ingest-to-truth
+architecture docs, shared model types, epistemic resolution primitives, and
+CI/AI enforcement scripts without replacing the existing runtime-oriented main
+repo layout.
+
+## Start Forge
+
+If you only want the self-coding part of ARK, use Forge.
+
+- WSL, Git Bash, or Linux/macOS terminal: `./forge`
+- Browser app: `./forge --desktop`
+- Linux/Arch app install: `./install-forge-arch.sh`
+- PowerShell: `.\forge.ps1`
+- Command Prompt: `forge.cmd`
+- One-click Windows launcher: `Forge App.cmd`
+- Runtime check: `./forge --check`
+
+The fastest beginner path is:
+
+1. Double-click `Forge App.cmd` on Windows, or run `./forge --desktop`.
+2. On Arch Linux, run `./install-forge-arch.sh` once if you want Forge in your app launcher.
+3. Type the task into the Forge composer.
+4. Press `Run`, inspect the live diff/tests/redteam panels, then accept or reject.
+
+The Linux app install is user-local only. It creates no systemd service. Use the Forge Shutdown button when you are done with the browser app.
+
+There is also a short guide at [`FORGE_START_HERE.md`](FORGE_START_HERE.md).
+
+## Canonical docs
+
+The architecture is intentionally split so each concept has one owner:
+
+| File | Owns |
+| --- | --- |
+| [`ARK_SPEC.md`](ARK_SPEC.md) | Main system architecture specification |
+| [`TRISCA.md`](TRISCA.md) | Distribution-aware scoring and control |
+| [`SYSTEM_MAP.md`](SYSTEM_MAP.md) | Root system topology |
+| [`ark-core/docs/ARK_TRUTH_SPINE.md`](ark-core/docs/ARK_TRUTH_SPINE.md) | Universal ingest-to-truth architecture |
+| [`ark-core/docs/CODEX_ARK_SYSTEM_PROMPT.md`](ark-core/docs/CODEX_ARK_SYSTEM_PROMPT.md) | Agent/runtime behavior contract |
+| [`ark-core/docs/MISSION_GRADE_RULES.md`](ark-core/docs/MISSION_GRADE_RULES.md) | Mission posture, central operating rules, and invariants |
+| [`ark-core/docs/TODO_TIERS.md`](ark-core/docs/TODO_TIERS.md) | S/T/P governance rules |
+| [`ark-core/docs/REDTEAM.md`](ark-core/docs/REDTEAM.md) | Red Team gates and scenarios |
+| [`ark-core/docs/ark-field-v4.2-foundation.md`](ark-core/docs/ark-field-v4.2-foundation.md) | Field stage bridge into the truth spine |
+
 ---
 
 ## 🎯 What is ARK?
@@ -18,6 +63,71 @@ ARK is a **self-scaling distributed compute organism** where:
 ```
 event pressure → mesh discovery → agent execution → state logging → feedback → autoscaling
 ```
+
+## SD-ARK Loop
+
+SD-ARK adds a deterministic Go spine for replayable, event-driven execution:
+
+```
+Event → Resolve(Δ) → TRISCA → S[6] → Policy → Intent → Action → Result → Meta(Δ_defs)
+```
+
+`S[6]` is the bounded TRISCA vector:
+
+```
+[structure, entropy, inequality, temporal, efficiency, signal_density]
+```
+
+### SD-ARK Module Map
+
+| Path | Role |
+| --- | --- |
+| `core/step.go` | Single Step loop, typed contracts, health signals, structured failures |
+| `core/trisca.go` | One deterministic TRISCA path producing `S[6]` |
+| `core/bayes.go` | Bounded log-odds update for evidence deltas |
+| `core/interpreter.go` | Wiring boundary from event ingress into Step |
+| `runtime/compiler.go` | Compiles bounded definition files into runtime tables |
+| `definitions/*.yaml` | JSON-compatible YAML policy, action, routing, and meta definitions |
+| `policy/policy.go` | Table-driven policy scoring with `confidence*EV-cost` |
+| `action/action.go` | Thin idempotent adapter execution boundary |
+| `meta/meta.go` | Bounded meta delta emission and safe local application |
+| `gsb/gsb.go` | Pub/sub interface with in-memory replayable implementation |
+| `api/server.go` | `/ingest`, `/gsb`, `/trisca`, `/policy`, `/action`, `/meta` handlers |
+| `ark/sd_trisca.py` | Python TRISCA mirror for planners and tool selection |
+| `ark/task_graph.py` | Bounded DAG TaskSpec, executor, scheduler, chunker, reducer, replay cache |
+| `ark/tool_system.py` | TRISCA-driven tool registry and selector with max 5 exposed tools |
+| `ark/skills.py` | Skill pipelines that produce DAG task specs instead of tool exposure |
+| `ark/mcp_containment.py` | Sandboxed MCP fallback boundary outside the core loop |
+| `ark/codegen_safe.py` | Safe-mode plugin spec generation and validation without shell execution |
+| `ark/forge_planner.py` | Forge planner facade; agents emit plans and do not execute DAGs |
+
+Runtime caps are explicit in each module health result. Tables, request bodies,
+logs, actions, messages, observations, and emitted meta deltas are bounded so the
+loop remains replayable under partial failure.
+
+### SD-ARK Execution Flow
+
+```
+Reality
+  -> /ingest
+  -> /gsb
+  -> /trisca
+  -> S[6]
+  -> ToolSelector
+  -> Skills / Forge planners
+  -> DAG Scheduler (max concurrency 10)
+  -> API tools
+  -> optional MCP fallback
+  -> /action
+  -> Result
+  -> /meta
+```
+
+MCP is contained as `tool.mcp.exec` and is fallback-only. Tool exposure is capped
+at five selected tools, selected deterministically from TRISCA vectors, cost, and
+success rate. Missing tools go through safe-mode codegen as static plugin specs:
+generate spec, validate, sandbox result, then register only after external
+validation.
 
 ---
 
@@ -86,55 +196,12 @@ event pressure → mesh discovery → agent execution → state logging → feed
 
 ---
 
-## 🚀 Quick Start
-
-### 1. Build Images
-
-```bash
-docker-compose build mesh-registry autoscaler opencode openwolf composio
-```
-
-### 2. Start System
-
-```bash
-docker-compose up -d
-```
-
-### 3. Verify
-
-```bash
-curl http://localhost:7000/api/mesh | jq
-```
-
-Expected:
-```json
-{
-  "services": 3,
-  "instances": 3,
-  "capabilities": 15
-}
-```
-
-### 4. Test Capability
-
-**Terminal 1:**
-```bash
-docker exec ark-nats nats sub "ark.reply.test-001" --raw
-```
-
-**Terminal 2:**
-```bash
-docker exec ark-nats nats pub "ark.call.opencode.code.analyze" \
-'{"request_id":"test-001","params":{"source":"def foo(): pass","language":"python"}}'
-```
-
----
-
 ## 📚 Documentation
 
 | Document | Purpose |
 |----------|---------|
 | **ARK_SPEC.md** | Complete architecture specification |
+| **TRISCA.md** | Distribution-aware scoring & control framework |
 | **DEPLOYMENT_GUIDE.md** | Step-by-step deployment instructions |
 | **QUICK_REFERENCE.md** | Command reference & troubleshooting |
 | **EXAMPLES.md** | Code examples for integration |
@@ -353,6 +420,7 @@ docker-compose up -d my-agent
 ├── Dockerfile.*                       # Service images
 ├── docker-compose.yml                 # Stack definition
 ├── ARK_SPEC.md                       # Architecture
+├── TRISCA.md                         # Scoring framework
 ├── DEPLOYMENT_GUIDE.md               # Setup instructions
 ├── QUICK_REFERENCE.md                # Commands
 ├── EXAMPLES.md                       # Integration code
@@ -394,6 +462,7 @@ docker-compose up -d my-agent
 ## 📞 Support & Resources
 
 - **Architecture**: See `ARK_SPEC.md`
+- **TRISCA**: See `TRISCA.md`
 - **Setup**: See `DEPLOYMENT_GUIDE.md`
 - **Commands**: See `QUICK_REFERENCE.md`
 - **Examples**: See `EXAMPLES.md`
@@ -414,3 +483,31 @@ docker-compose up -d my-agent
 **ARK is ready. Events flow. Services scale. Intelligence emerges.**
 
 Built with Gordon for production deployment.
+
+## Truth Spine Additions
+
+| Area | Role |
+| --- | --- |
+| [`ark-core/`](ark-core/README.md) | Canonical integration target for control plane + truth spine |
+| [`ark-core/internal/models/`](ark-core/internal/models/) | Shared event, stability, and ingest-to-truth model types |
+| [`ark-core/internal/epistemic/`](ark-core/internal/epistemic/) | Claim states, conflict groups, resolver, and policy types |
+| [`ark-core/scripts/ai/`](ark-core/scripts/ai/) | Agent prompt + offline orchestration scaffold |
+| [`./forge`](forge) | Low-friction self-coding launcher into the Forge engine |
+| [`ark-core/scripts/ci/`](ark-core/scripts/ci/) | Tier enforcement + Red Team gates |
+| [`ark-core/config/tiering_rules.json`](ark-core/config/tiering_rules.json) | Canonical S/T/P policy configuration |
+
+## Verify
+
+From [`ark-core/`](ark-core/README.md):
+
+```powershell
+.\scripts\verify.ps1
+go test ./...
+docker compose -f docker-compose.yml config
+```
+
+## Merge Rule
+
+This workspace now prefers cross-links over repeated prose. If a concept already
+has a canonical file, add a reference to that file instead of creating a second
+version of the same explanation.

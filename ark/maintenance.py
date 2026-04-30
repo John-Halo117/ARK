@@ -4,16 +4,16 @@ shutdown coordination, periodic cleanup, and structured diagnostics.
 """
 
 import asyncio
-import json
 import logging
-import os
 import signal
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
-import nats
-from nats.errors import Error as NATSError
+try:
+    import nats
+except ImportError:  # pragma: no cover - exercised by import-only environments
+    nats = None
 
 logger = logging.getLogger("ARK-Maintenance")
 
@@ -109,11 +109,13 @@ class ResilientNATSConnection:
         url: str = "nats://nats:4222",
         max_reconnect_delay: float = 60.0,
         connect_timeout: float = 10.0,
+        max_attempts: int = 10,
     ):
         self.url = url
         self._max_delay = max_reconnect_delay
         self._connect_timeout = connect_timeout
-        self.nc: Optional[nats.NATS] = None
+        self._max_attempts = max(1, min(max_attempts, 100))
+        self.nc: Optional[Any] = None
         self.js = None
         self._attempt = 0
 
@@ -121,9 +123,11 @@ class ResilientNATSConnection:
     def is_connected(self) -> bool:
         return self.nc is not None and self.nc.is_connected
 
-    async def connect(self) -> nats.NATS:
+    async def connect(self) -> Any:
         """Connect (or reconnect) with exponential backoff."""
-        while True:
+        if nats is None:
+            raise RuntimeError("nats package is not installed")
+        for _ in range(self._max_attempts):
             try:
                 self._attempt += 1
                 self.nc = await nats.connect(
@@ -149,6 +153,7 @@ class ResilientNATSConnection:
                     delay,
                 )
                 await asyncio.sleep(delay)
+        raise RuntimeError(f"NATS unavailable after {self._max_attempts} attempts")
 
     async def close(self) -> None:
         if self.nc:
@@ -244,11 +249,13 @@ class PeriodicTask:
         interval: float,
         func: Callable[[], Coroutine],
         max_failures: int = 10,
+        max_runs: int = 1_000_000,
     ):
         self.name = name
         self.interval = interval
         self.func = func
         self.max_failures = max_failures
+        self.max_runs = max(1, min(max_runs, 1_000_000))
         self._consecutive_failures = 0
         self._total_runs = 0
         self._disabled = False
@@ -260,7 +267,9 @@ class PeriodicTask:
     async def run_forever(self, shutdown: Optional[ShutdownCoordinator] = None) -> None:
         """Loop until disabled or shutdown is requested."""
         logger.info("Periodic task %r started (interval=%ss)", self.name, self.interval)
-        while not self._disabled:
+        for _ in range(self.max_runs):
+            if self._disabled:
+                break
             if shutdown and shutdown.is_shutting_down:
                 break
             try:
@@ -281,6 +290,8 @@ class PeriodicTask:
                 if self._consecutive_failures >= self.max_failures:
                     logger.error("Periodic task %r disabled after %d failures", self.name, self.max_failures)
                     self._disabled = True
+        if self._total_runs >= self.max_runs:
+            self._disabled = True
 
     def stats(self) -> Dict[str, Any]:
         return {
@@ -359,13 +370,14 @@ class ConnectionWatchdog:
         asyncio.create_task(wd.run())
     """
 
-    def __init__(self, conn: ResilientNATSConnection, interval: float = 10.0):
+    def __init__(self, conn: ResilientNATSConnection, interval: float = 10.0, max_checks: int = 1_000_000):
         self._conn = conn
         self._interval = interval
+        self._max_checks = max(1, min(max_checks, 1_000_000))
         self._reconnect_count = 0
 
     async def run(self, shutdown: Optional[ShutdownCoordinator] = None) -> None:
-        while True:
+        for _ in range(self._max_checks):
             if shutdown and shutdown.is_shutting_down:
                 break
             await asyncio.sleep(self._interval)

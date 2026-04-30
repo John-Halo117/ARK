@@ -7,15 +7,27 @@ Bridges Home Assistant events into NATS for processing by agents
 import asyncio
 import json
 import logging
-import os
 import uuid
-from datetime import datetime
 from typing import Dict, Any, List
 
 import aiohttp
+from ark.config import load_homeassistant_config
+from ark.emitter_contracts import (
+    build_homeassistant_state_change_plans,
+    build_homeassistant_temperature_metric_plan,
+)
+from ark.event_schema import EventSource
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.reducers import KeyedItemsReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit
 from ark.security import validate_entity_id
-import nats
-from nats.errors import Error as NATSError
+try:
+    import nats
+    from nats.errors import Error as NATSError
+except ImportError:  # pragma: no cover - local import/test environments
+    nats = None
+    NATSError = RuntimeError
 
 from ark.subjects import (
     MESH_REGISTER, MESH_HEARTBEAT, METRICS_TEMPERATURE,
@@ -23,6 +35,7 @@ from ark.subjects import (
     EVENT_SENSOR_READING,
     call_subscribe_subject, reply_subject, parse_capability_from_subject,
 )
+from ark.time_utils import utc_now_iso
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,11 +48,12 @@ class HomeAssistantEmitter:
     """Emits Home Assistant state changes and events into ARK"""
     
     def __init__(self):
+        config = load_homeassistant_config()
         self.service_name = "homeassistant"
-        self.instance_id = os.environ.get('INSTANCE_ID', str(uuid.uuid4())[:12])
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.ha_url = os.environ.get('HA_URL', 'http://homeassistant:8123')
-        self.ha_token = os.environ.get('HA_TOKEN', '')
+        self.instance_id = config.runtime.instance_id
+        self.nats_url = config.runtime.nats_url
+        self.ha_url = config.ha_url
+        self.ha_token = config.ha_token
         
         self.capabilities = [
             "event.home_assistant",
@@ -54,12 +68,41 @@ class HomeAssistantEmitter:
         self.js = None
         self.session = None
         self.event_count = 0
-        self.tracked_entities: Dict[str, Any] = {}
+        self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.EMITTER_HA.value,
+            surface="emitter",
+            default_tags={"emitter": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
+        self.reducer_engine = ReducerEngine(
+            (
+                KeyedItemsReducer(
+                    name="emitter.homeassistant.entities",
+                    key_field="entity_id",
+                    upsert_event="homeassistant.entity_observed",
+                ),
+            )
+        )
+        self.tracked_entities: Dict[str, Any] = self.reducer_engine.view("emitter.homeassistant.entities")["items"]
+        self.dispatch = DispatchRegistry(
+            (
+                DispatchDescriptor("event.home_assistant", self.get_events),
+                DispatchDescriptor("state.device_update", self.update_device),
+                DispatchDescriptor("climate.temperature", self.get_temperature),
+                DispatchDescriptor("light.toggle", self.toggle_light),
+                DispatchDescriptor("sensor.reading", self.get_sensor),
+            ),
+            contracts=self.contracts,
+        )
         
         logger.info(f"HA Emitter initialized (instance={self.instance_id})")
     
     async def connect(self):
         """Connect to NATS and create HTTP session"""
+        if nats is None:
+            raise RuntimeError("nats package is not installed")
         try:
             self.nc = await nats.connect(self.nats_url)
             self.js = self.nc.jetstream()
@@ -78,12 +121,12 @@ class HomeAssistantEmitter:
             "metadata": {
                 "version": "1.0.0",
                 "ha_url": self.ha_url,
-                "started_at": datetime.utcnow().isoformat()
+                "started_at": utc_now_iso()
             },
             "ttl": 10
         }
         
-        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
+        await self._publish_nats(self.nc, MESH_REGISTER, event, "emitter.register")
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -92,13 +135,13 @@ class HomeAssistantEmitter:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
+                await self._publish_nats(self.nc, MESH_HEARTBEAT, {
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.event_count / 100.0,
                     "healthy": True,
-                    "timestamp": datetime.utcnow().isoformat()
-                }).encode())
+                    "timestamp": utc_now_iso()
+                }, "emitter.heartbeat")
                 
                 self.event_count = 0
                 
@@ -158,11 +201,17 @@ class HomeAssistantEmitter:
                     
                     # Store current state
                     previous_states[entity_id] = state
-                    self.tracked_entities[entity_id] = {
-                        "state": current,
-                        "attributes": attributes,
-                        "last_change": datetime.utcnow().isoformat()
-                    }
+                    self.reducer_engine.apply(
+                        "homeassistant.entity_observed",
+                        {
+                            "entity_id": entity_id,
+                            "value": {
+                                "state": current,
+                                "attributes": attributes,
+                                "last_change": utc_now_iso(),
+                            },
+                        },
+                    )
                 
                 await asyncio.sleep(5)  # Poll every 5 seconds
             
@@ -174,45 +223,16 @@ class HomeAssistantEmitter:
                                 new_state: str, attributes: Dict[str, Any]):
         """Emit state change event to ARK"""
         try:
-            # Determine event type by entity prefix
-            entity_type = entity_id.split('.')[0]
-            
-            if entity_type == 'climate':
-                topic = EVENT_CLIMATE_TEMPERATURE
-                value = attributes.get('current_temperature', 0)
-            elif entity_type == 'light':
-                topic = EVENT_LIGHT_TOGGLE
-                value = new_state
-            elif entity_type == 'sensor':
-                topic = EVENT_SENSOR_READING
-                value = new_state
-            else:
-                topic = EVENT_STATE_CHANGE
-                value = new_state
-            
-            event = {
-                "entity_id": entity_id,
-                "old_state": old_state,
-                "new_state": new_state,
-                "attributes": attributes,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "homeassistant"
-            }
-            
-            # Publish state change
-            await self.js.publish(topic, json.dumps(event).encode())
-            
-            # Also emit to general event topic for agents to process,
-            # but only if the typed topic differs (avoids duplicate publish
-            # for generic entities whose topic is already EVENT_STATE_CHANGE).
-            if topic != EVENT_STATE_CHANGE:
-                await self.js.publish(EVENT_STATE_CHANGE, json.dumps({
-                    "type": "homeassistant.state_change",
-                    "entity_id": entity_id,
-                    "old_state": old_state,
-                    "new_state": new_state,
-                    "payload": event
-                }).encode())
+            timestamp = utc_now_iso()
+            plans = build_homeassistant_state_change_plans(
+                entity_id=entity_id,
+                old_state=old_state,
+                new_state=new_state,
+                attributes=attributes,
+                timestamp=timestamp,
+            )
+            for plan in plans:
+                await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.info(f"Emitted state change: {entity_id} {old_state} → {new_state}")
             self.event_count += 1
@@ -223,13 +243,12 @@ class HomeAssistantEmitter:
     async def emit_temperature_metric(self, entity_id: str, temperature: float):
         """Emit temperature as metric for anomaly detection"""
         try:
-            await self.js.publish(METRICS_TEMPERATURE, json.dumps({
-                "name": f"climate.{entity_id}",
-                "value": temperature,
-                "unit": "celsius",
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "homeassistant"
-            }).encode())
+            plan = build_homeassistant_temperature_metric_plan(
+                entity_id=entity_id,
+                temperature=temperature,
+                timestamp=utc_now_iso(),
+            )
+            await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.debug(f"Emitted temperature metric: {entity_id} = {temperature}°C")
         
@@ -246,7 +265,10 @@ class HomeAssistantEmitter:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     
-                    request = json.loads(msg.data.decode())
+                    request = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
                     params = request.get('params', {})
                     
@@ -254,7 +276,7 @@ class HomeAssistantEmitter:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
+                    await self._publish_nats(self.js, reply_subject(request_id), result, "emitter.reply")
                     
                     self.event_count += 1
                 
@@ -266,18 +288,7 @@ class HomeAssistantEmitter:
     
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle capability requests"""
-        if capability == "event.home_assistant":
-            return await self.get_events(params)
-        elif capability == "state.device_update":
-            return await self.update_device(params)
-        elif capability == "climate.temperature":
-            return await self.get_temperature(params)
-        elif capability == "light.toggle":
-            return await self.toggle_light(params)
-        elif capability == "sensor.reading":
-            return await self.get_sensor(params)
-        else:
-            return {"error": f"Unknown capability: {capability}"}
+        return await self.audit.execute(self.dispatch, capability, params)
     
     async def get_events(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get recent Home Assistant events"""
@@ -289,7 +300,7 @@ class HomeAssistantEmitter:
             "capability": "event.home_assistant",
             "events": list(self.tracked_entities.items())[:limit],
             "total_tracked": len(self.tracked_entities),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
     
     async def update_device(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -327,7 +338,7 @@ class HomeAssistantEmitter:
                     "entity_id": entity_id,
                     "new_state": new_state,
                     "success": success,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": utc_now_iso()
                 }
         
         except Exception as e:
@@ -351,7 +362,7 @@ class HomeAssistantEmitter:
                 "entity_id": entity_id,
                 "temperature": temperature,
                 "unit": "celsius",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": utc_now_iso()
             }
         
         return {
@@ -377,7 +388,7 @@ class HomeAssistantEmitter:
                 "old_state": current,
                 "new_state": new_state,
                 "success": True,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": utc_now_iso()
             }
         
         return {
@@ -398,13 +409,16 @@ class HomeAssistantEmitter:
                 "entity_id": entity_id,
                 "state": entity.get('state'),
                 "attributes": entity.get('attributes', {}),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": utc_now_iso()
             }
         
         return {
             "error": f"Sensor not found: {entity_id}",
             "entity_id": entity_id
         }
+
+    async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
+        await self.audit.publish_json(target, subject, payload, capability)
     
     async def run(self):
         """Main emitter loop"""

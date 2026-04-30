@@ -7,7 +7,7 @@ import duckdb
 import logging
 from typing import List, Dict, Any, Optional
 from ark.event_schema import ArkEvent, LKS
-from ark.security import clamp_limit, sanitize_string, validate_event_id
+from ark.security import clamp_limit, sanitize_string
 
 logger = logging.getLogger("ARK-DuckClient")
 

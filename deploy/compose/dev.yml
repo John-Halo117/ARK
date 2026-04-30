@@ -1,0 +1,8 @@
+version: '3.9'
+services:
+  ingestion:
+    build: ../../cmd/ingestion
+  kernel:
+    build: ../../cmd/stability
+  ai:
+    image: ollama/ollama

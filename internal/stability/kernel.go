@@ -8,6 +8,13 @@ import (
 	"github.com/John-Halo117/ARK/arkfield/internal/models"
 )
 
+// KernelV42 is the canonical ARK Stability Kernel interface.
+type KernelV42 interface {
+	Evaluate(obs Observation) Decision
+}
+
+// --- existing code below ---
+
 type Config struct {
 	AlphaMax          float64
 	EntropyGuard      float64
@@ -103,7 +110,7 @@ func (k *Kernel) Evaluate(o Observation) Decision {
 	}
 
 	wT := math.Exp(-k.cfg.TimeDecayRate * o.Elapsed.Seconds())
-	alpha := o.Alpha
+	alpha := clamp(o.Alpha, 0, k.cfg.AlphaMax)
 	nextX := o.CurrentX + alpha*(o.TargetX-o.CurrentX)*wT
 
 	trustValue := trustWeightedFusion(o.TrustSources)
@@ -114,14 +121,14 @@ func (k *Kernel) Evaluate(o Observation) Decision {
 	score := weights.WA*o.SignalA + weights.WK*o.SignalK + weights.WG*o.SignalGradC
 	activation := sigmoid(score)
 
-	guardFreeze := math.Abs(o.DeltaG) > k.cfg.GMax || divergence != 0 || backpressureViolation || o.Alpha > k.cfg.AlphaMax
+	guardFreeze := math.Abs(o.DeltaG) > k.cfg.GMax || divergence != 0 || backpressureViolation
 	guardSigma := math.Abs(o.DeltaX) > k.cfg.SigmaK*math.Max(o.Sigma, 1e-9)
 	guardHysteretic := o.CNew+k.cfg.HysteresisLambda < o.COld
 	guardBoundedReaction := !(o.Alpha > 0 && o.Alpha < 1)
 
 	recoveryTheta := o.RecoveryTheta + o.RecoveryLearningRate*o.RecoveryLossGradient
 
-	s2 := guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction || entropyValue > k.cfg.EntropyGuard
+	s2 := guardFreeze || entropyValue > k.cfg.EntropyGuard
 	reason := ""
 	if guardFreeze {
 		reason = "hard_freeze"
@@ -160,7 +167,7 @@ func (k *Kernel) Evaluate(o Observation) Decision {
 	return Decision{
 		NextX:       nextX,
 		Metrics:     metrics,
-		Freeze:      guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction || entropyValue > k.cfg.EntropyGuard,
+		Freeze:      guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction,
 		Reason:      reason,
 		S2Activated: s2,
 	}
@@ -205,4 +212,14 @@ func curvature(center float64, neighbors []CurvatureNode) float64 {
 
 func sigmoid(v float64) float64 {
 	return 1.0 / (1.0 + math.Exp(-v))
+}
+
+func clamp(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }

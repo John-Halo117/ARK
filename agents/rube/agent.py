@@ -3,7 +3,6 @@ Rube Agent - Graph Reasoning & Relationships
 Handles entity relationships, graph queries, and semantic reasoning
 """
 
-import json
 import logging
 
 logger = logging.getLogger('rube-agent')
@@ -80,6 +79,7 @@ class Agent:
             "agent": "Rube",
             "action": "infer",
             "input_entities": len(entities),
+            "context_keys": len(context) if isinstance(context, dict) else 0,
             "inferred_relations": [],
             "confidence_scores": {}
         }

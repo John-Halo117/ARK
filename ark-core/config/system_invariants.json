@@ -1,0 +1,52 @@
+{
+  "invariants": [
+    {
+      "id": "INV-001",
+      "name": "Claims Are Not Truth",
+      "statement": "Only SSOT is actionable truth.",
+      "category": "truth"
+    },
+    {
+      "id": "INV-002",
+      "name": "Accepted Values Trace To Raw",
+      "statement": "Every accepted value must trace to raw evidence.",
+      "category": "provenance"
+    },
+    {
+      "id": "INV-003",
+      "name": "Graph May Disagree",
+      "statement": "The graph may contain contradictions, but SSOT may not.",
+      "category": "epistemic"
+    },
+    {
+      "id": "INV-004",
+      "name": "No Silent Mutation",
+      "statement": "Policy-relevant state must not mutate without an event and lineage.",
+      "category": "state"
+    },
+    {
+      "id": "INV-005",
+      "name": "Append-Only Evidence",
+      "statement": "Accepted state transitions and audit evidence are append-only by default.",
+      "category": "audit"
+    },
+    {
+      "id": "INV-006",
+      "name": "Deterministic Governed Paths",
+      "statement": "Classify, resolve, promote, recover, and verify must be replayable from the same inputs.",
+      "category": "determinism"
+    },
+    {
+      "id": "INV-007",
+      "name": "Bounded Action",
+      "statement": "Every action path must declare timeout, retry policy, budget, failure mode, and verify step.",
+      "category": "safety"
+    },
+    {
+      "id": "INV-008",
+      "name": "Fail Safe Over Ambiguous Success",
+      "statement": "If a dependency is missing or untrusted, the system narrows behavior or enters SAFE mode.",
+      "category": "recovery"
+    }
+  ]
+}

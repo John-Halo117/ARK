@@ -1,29 +1,17 @@
 # ARK-Field v4.2 — Stage 2
 
-## Orthogonal, SOLID, DRY, Idempotent Architecture
-
-- `internal/ingestion/service.go` is now orchestration-only with dependency inversion through interfaces:
-  - `CommitSource`
-  - `DedupeSequencer`
-  - `Publisher`
-  - `StabilityEvaluator`
-- Adapter implementations are isolated by boundary:
-  - `internal/adapters/gitcommit/source.go`
-  - `internal/adapters/redisstate/store.go`
-  - `internal/adapters/natspub/publisher.go`
-  - `internal/adapters/stabilitywrap/evaluator.go`
-- Shared env parsing is DRY in `internal/config/env.go`.
-- Idempotency is enforced with Redis reservation + pending marker + final commit record.
-- Ingestion Leader explicitly blocks duplicate-in-flight state hashes.
+## Added
+- `internal/stability/kernel.go`: Stability Kernel v4.2 equations, guards, and recovery rule in one module.
+- `internal/ingestion/service.go`: Ingestion Leader flow (normalize diff, state hash, Redis dedupe, sequence, CID wrap, stability gate, NATS publish).
+- `internal/transport/redis.go`: minimal RESP Redis client (`PING`, `GET`, `SET`, `INCR`).
+- `internal/transport/nats.go`: minimal NATS client (`CONNECT`, `PING`, `PUB`).
 
 ## Ingestion Leader calling Stability Kernel
-
 `internal/ingestion/service.go` invokes kernel evaluation before publish:
 
 ```go
-decision := s.Stability.Evaluate(obsBuilder(req, commit))
+decision := s.Kernel.Evaluate(defaultObservation())
 if decision.Freeze {
-    _ = s.Store.Release(stateHash)
-    return nil, false, fmt.Errorf("stability rejected event: %s", decision.Reason)
+    return nil, false, fmt.Errorf("stability freeze: %s", decision.Reason)
 }
 ```

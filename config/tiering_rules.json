@@ -1,0 +1,22 @@
+{
+  "scope_tiers": {
+    "S1": {"name": "local_isolated", "max_files": 1, "cross_service": false, "system_wide": false},
+    "S2": {"name": "module_contained", "max_files": 5, "cross_service": false, "system_wide": false},
+    "S3": {"name": "service_level", "max_files": 12, "cross_service": false, "system_wide": false},
+    "S4": {"name": "cross_service_contract", "max_files": 25, "cross_service": true, "system_wide": false},
+    "S5": {"name": "system_wide_invariant", "max_files": 999, "cross_service": true, "system_wide": true}
+  },
+  "todo_tiers": {
+    "T1": {"name": "micro", "max_loc": 5},
+    "T2": {"name": "small", "max_loc": 30},
+    "T3": {"name": "medium", "max_loc": 150},
+    "T4": {"name": "large", "max_loc": 500},
+    "T5": {"name": "systemic", "max_loc": 999999}
+  },
+  "signals": {
+    "system_wide_paths": ["policy/", "config/manifest.json", "config/ark.env", "internal/stability/", "internal/crypto/", "internal/promotion/", "scripts/ci/run_once.sh"],
+    "cross_service_paths": ["cmd/", "internal/contracts/", "internal/transport/", "deploy/", "scripts/ci/"],
+    "service_roots": ["cmd/ingestion-leader/", "cmd/stability-kernel/", "cmd/netwatch/"],
+    "high_risk_keywords": ["invariant", "signature", "mtls", "audit", "promotion", "kernel", "policy", "recovery"]
+  }
+}

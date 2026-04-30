@@ -1,0 +1,187 @@
+{
+  "version": "v1",
+  "contracts": {
+    "runtime.gateway.call_body": {
+      "required": ["params"],
+      "optional": ["request_id"],
+      "field_types": {
+        "params": ["dict"],
+        "request_id": ["str"]
+      }
+    },
+    "runtime.capability.call_message": {
+      "required": ["request_id", "service", "instance_id", "capability", "params"],
+      "optional": [],
+      "field_types": {
+        "request_id": ["str"],
+        "service": ["str"],
+        "instance_id": ["str"],
+        "capability": ["str"],
+        "params": ["dict"]
+      }
+    },
+    "runtime.capability.reply": {
+      "required": [],
+      "optional": [],
+      "field_types": {},
+      "allow_additional_fields": true
+    },
+    "runtime.mesh.registration": {
+      "required": ["service", "instance_id", "capabilities", "metadata", "ttl"],
+      "optional": [],
+      "field_types": {
+        "service": ["str"],
+        "instance_id": ["str"],
+        "capabilities": ["list"],
+        "metadata": ["dict"],
+        "ttl": ["int"]
+      }
+    },
+    "runtime.mesh.heartbeat": {
+      "required": ["service", "instance_id", "load", "healthy", "timestamp"],
+      "optional": [],
+      "field_types": {
+        "service": ["str"],
+        "instance_id": ["str"],
+        "load": ["int", "float"],
+        "healthy": ["bool"],
+        "timestamp": ["str"]
+      }
+    },
+    "runtime.autoscaler.queue_signal": {
+      "required": ["depth"],
+      "optional": [],
+      "field_types": {
+        "depth": ["int", "float"]
+      }
+    },
+    "runtime.autoscaler.latency_signal": {
+      "required": ["latency_ms"],
+      "optional": [],
+      "field_types": {
+        "latency_ms": ["int", "float"]
+      }
+    },
+    "runtime.integration.request": {
+      "required": ["capability", "params"],
+      "optional": [],
+      "field_types": {
+        "capability": ["str"],
+        "params": ["dict"]
+      }
+    },
+    "runtime.integration.result": {
+      "required": ["status", "capability"],
+      "optional": ["error_code", "reason", "context", "recoverable"],
+      "field_types": {
+        "status": ["str"],
+        "capability": ["str"],
+        "error_code": ["str"],
+        "reason": ["str"],
+        "context": ["dict"],
+        "recoverable": ["bool"]
+      },
+      "allow_additional_fields": true
+    },
+    "runtime.emitter.homeassistant.state_change": {
+      "required": ["entity_id", "old_state", "new_state", "value", "attributes", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "entity_id": ["str"],
+        "old_state": ["str"],
+        "new_state": ["str"],
+        "value": ["str", "int", "float", "bool", "null"],
+        "attributes": ["dict"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    },
+    "runtime.emitter.homeassistant.state_change_envelope": {
+      "required": ["type", "entity_id", "old_state", "new_state", "payload"],
+      "optional": [],
+      "field_types": {
+        "type": ["str"],
+        "entity_id": ["str"],
+        "old_state": ["str"],
+        "new_state": ["str"],
+        "payload": ["dict"]
+      }
+    },
+    "runtime.emitter.metric.reading": {
+      "required": ["name", "value", "unit", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "name": ["str"],
+        "value": ["int", "float"],
+        "unit": ["str"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    },
+    "runtime.emitter.unifi.device_online": {
+      "required": ["event", "device_id", "device_name", "ip_address", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "event": ["str"],
+        "device_id": ["str"],
+        "device_name": ["str"],
+        "ip_address": ["str"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    },
+    "runtime.emitter.unifi.device_status_changed": {
+      "required": ["event", "device_id", "device_name", "ip_address", "old_status", "new_status", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "event": ["str"],
+        "device_id": ["str"],
+        "device_name": ["str"],
+        "ip_address": ["str"],
+        "old_status": ["str"],
+        "new_status": ["str"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    },
+    "runtime.emitter.jellyfin.playback_start": {
+      "required": ["event", "session_id", "device", "title", "media_type", "item", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "event": ["str"],
+        "session_id": ["str"],
+        "device": ["str"],
+        "title": ["str"],
+        "media_type": ["str"],
+        "item": ["dict"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    },
+    "runtime.emitter.jellyfin.playback_changed": {
+      "required": ["event", "session_id", "device", "title", "media_type", "item", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "event": ["str"],
+        "session_id": ["str"],
+        "device": ["str"],
+        "title": ["str"],
+        "media_type": ["str"],
+        "item": ["dict"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    },
+    "runtime.emitter.jellyfin.playback_stop": {
+      "required": ["event", "session_id", "device", "timestamp", "source"],
+      "optional": [],
+      "field_types": {
+        "event": ["str"],
+        "session_id": ["str"],
+        "device": ["str"],
+        "timestamp": ["str"],
+        "source": ["str"]
+      }
+    }
+  }
+}

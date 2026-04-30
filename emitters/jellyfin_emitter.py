@@ -7,20 +7,34 @@ Emits media events into ARK for processing
 import asyncio
 import json
 import logging
-import os
 import uuid
-from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 import aiohttp
-import nats
-from nats.errors import Error as NATSError
+from ark.config import load_jellyfin_config
+from ark.emitter_contracts import (
+    build_jellyfin_playback_change_plan,
+    build_jellyfin_playback_start_plans,
+    build_jellyfin_playback_stop_plan,
+)
+from ark.event_schema import EventSource
+from ark.gsb import GlobalStateBus, build_global_state_bus
+from ark.reducers import KeyedItemsReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import DispatchDescriptor, DispatchRegistry, RuntimeAudit
+try:
+    import nats
+    from nats.errors import Error as NATSError
+except ImportError:  # pragma: no cover - local import/test environments
+    nats = None
+    NATSError = RuntimeError
 
 from ark.subjects import (
     MESH_REGISTER, MESH_HEARTBEAT,
     EVENT_MEDIA_PLAYBACK, METRICS_MEDIA_DURATION,
     call_subscribe_subject, reply_subject, parse_capability_from_subject,
 )
+from ark.time_utils import utc_now_iso
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,12 +47,13 @@ class JellyfinEmitter:
     """Emits Jellyfin media events into ARK"""
     
     def __init__(self):
+        config = load_jellyfin_config()
         self.service_name = "jellyfin"
-        self.instance_id = os.environ.get('INSTANCE_ID', str(uuid.uuid4())[:12])
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.jellyfin_url = os.environ.get('JELLYFIN_URL', 'http://jellyfin:8096')
-        self.jellyfin_token = os.environ.get('JELLYFIN_TOKEN', '')
-        self.jellyfin_user_id = os.environ.get('JELLYFIN_USER_ID', '')
+        self.instance_id = config.runtime.instance_id
+        self.nats_url = config.runtime.nats_url
+        self.jellyfin_url = config.jellyfin_url
+        self.jellyfin_token = config.jellyfin_token
+        self.jellyfin_user_id = config.jellyfin_user_id
         
         self.capabilities = [
             "media.playback",
@@ -52,12 +67,42 @@ class JellyfinEmitter:
         self.js = None
         self.session = None
         self.event_count = 0
-        self.active_sessions: Dict[str, Any] = {}
+        self.gsb: GlobalStateBus = build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.EMITTER_JELLYFIN.value,
+            surface="emitter",
+            default_tags={"emitter": self.service_name},
+        )
+        self.contracts = runtime_contract_registry()
+        self.reducer_engine = ReducerEngine(
+            (
+                KeyedItemsReducer(
+                    name="emitter.jellyfin.sessions",
+                    key_field="session_id",
+                    upsert_event="jellyfin.session_observed",
+                    remove_event="jellyfin.session_removed",
+                ),
+            )
+        )
+        self.active_sessions: Dict[str, Any] = self.reducer_engine.view("emitter.jellyfin.sessions")["items"]
+        self.dispatch = DispatchRegistry(
+            (
+                DispatchDescriptor("media.playback", self.get_playback_status),
+                DispatchDescriptor("media.library", self.get_library),
+                DispatchDescriptor("media.search", self.search_media),
+                DispatchDescriptor("playback.status", self.get_playback_status),
+                DispatchDescriptor("library.items", self.get_library_items),
+            ),
+            contracts=self.contracts,
+        )
         
         logger.info(f"Jellyfin Emitter initialized (instance={self.instance_id})")
     
     async def connect(self):
         """Connect to NATS and create HTTP session"""
+        if nats is None:
+            raise RuntimeError("nats package is not installed")
         try:
             self.nc = await nats.connect(self.nats_url)
             self.js = self.nc.jetstream()
@@ -76,12 +121,12 @@ class JellyfinEmitter:
             "metadata": {
                 "version": "1.0.0",
                 "jellyfin_url": self.jellyfin_url,
-                "started_at": datetime.utcnow().isoformat()
+                "started_at": utc_now_iso()
             },
             "ttl": 10
         }
         
-        await self.nc.publish(MESH_REGISTER, json.dumps(event).encode())
+        await self._publish_nats(self.nc, MESH_REGISTER, event, "emitter.register")
         logger.info(f"Registered with mesh: {self.capabilities}")
     
     async def heartbeat_loop(self):
@@ -90,13 +135,13 @@ class JellyfinEmitter:
             await asyncio.sleep(5)
             
             try:
-                await self.nc.publish(MESH_HEARTBEAT, json.dumps({
+                await self._publish_nats(self.nc, MESH_HEARTBEAT, {
                     "service": self.service_name,
                     "instance_id": self.instance_id,
                     "load": self.event_count / 100.0,
                     "healthy": True,
-                    "timestamp": datetime.utcnow().isoformat()
-                }).encode())
+                    "timestamp": utc_now_iso()
+                }, "emitter.heartbeat")
                 
                 self.event_count = 0
                 
@@ -161,19 +206,28 @@ class JellyfinEmitter:
                             )
                         
                         # Update tracked session
-                        self.active_sessions[session_id] = {
-                            "device_name": device_name,
-                            "item_id": item_id,
-                            "title": title,
-                            "media_type": media_type,
-                            "last_update": datetime.utcnow().isoformat()
-                        }
+                        self.reducer_engine.apply(
+                            "jellyfin.session_observed",
+                            {
+                                "session_id": session_id,
+                                "value": {
+                                    "device_name": device_name,
+                                    "item_id": item_id,
+                                    "title": title,
+                                    "media_type": media_type,
+                                    "last_update": utc_now_iso(),
+                                },
+                            },
+                        )
                     else:
                         # No active playback
                         if session_id in self.active_sessions:
                             # Playback stopped
                             await self.emit_playback_stop(session_id, device_name)
-                            del self.active_sessions[session_id]
+                            self.reducer_engine.apply(
+                                "jellyfin.session_removed",
+                                {"session_id": session_id},
+                            )
                 
                 await asyncio.sleep(10)  # Poll every 10 seconds
             
@@ -185,28 +239,16 @@ class JellyfinEmitter:
                                   title: str, media_type: str, item: Dict[str, Any]):
         """Emit playback start event"""
         try:
-            event = {
-                "event": "playback_start",
-                "session_id": session_id,
-                "device": device,
-                "title": title,
-                "media_type": media_type,
-                "item": item,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "jellyfin"
-            }
-            
-            await self.js.publish(EVENT_MEDIA_PLAYBACK, json.dumps(event).encode())
-            
-            # Also emit metric for duration if available
-            duration = item.get('RunTimeTicks', 0)
-            if duration:
-                await self.js.publish(METRICS_MEDIA_DURATION, json.dumps({
-                    "name": f"media.{media_type}",
-                    "value": duration / 10000000,  # Convert ticks to seconds
-                    "unit": "seconds",
-                    "timestamp": datetime.utcnow().isoformat()
-                }).encode())
+            plans = build_jellyfin_playback_start_plans(
+                session_id=session_id,
+                device=device,
+                title=title,
+                media_type=media_type,
+                item=item,
+                timestamp=utc_now_iso(),
+            )
+            for plan in plans:
+                await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.info(f"Playback start: {device} → {title}")
             self.event_count += 1
@@ -218,18 +260,15 @@ class JellyfinEmitter:
                                    title: str, media_type: str, item: Dict[str, Any]):
         """Emit playback changed event"""
         try:
-            event = {
-                "event": "playback_changed",
-                "session_id": session_id,
-                "device": device,
-                "title": title,
-                "media_type": media_type,
-                "item": item,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "jellyfin"
-            }
-            
-            await self.js.publish(EVENT_MEDIA_PLAYBACK, json.dumps(event).encode())
+            plan = build_jellyfin_playback_change_plan(
+                session_id=session_id,
+                device=device,
+                title=title,
+                media_type=media_type,
+                item=item,
+                timestamp=utc_now_iso(),
+            )
+            await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.info(f"Playback changed: {device} → {title}")
             self.event_count += 1
@@ -240,15 +279,12 @@ class JellyfinEmitter:
     async def emit_playback_stop(self, session_id: str, device: str):
         """Emit playback stop event"""
         try:
-            event = {
-                "event": "playback_stop",
-                "session_id": session_id,
-                "device": device,
-                "timestamp": datetime.utcnow().isoformat(),
-                "source": "jellyfin"
-            }
-            
-            await self.js.publish(EVENT_MEDIA_PLAYBACK, json.dumps(event).encode())
+            plan = build_jellyfin_playback_stop_plan(
+                session_id=session_id,
+                device=device,
+                timestamp=utc_now_iso(),
+            )
+            await self._publish_nats(self.js, plan.subject, plan.payload, plan.capability)
             
             logger.info(f"Playback stopped: {device}")
             self.event_count += 1
@@ -266,7 +302,10 @@ class JellyfinEmitter:
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     
-                    request = json.loads(msg.data.decode())
+                    request = self.contracts.materialize_payload(
+                        "runtime.capability.call_message",
+                        json.loads(msg.data.decode()),
+                    )
                     request_id = request.get('request_id', str(uuid.uuid4())[:12])
                     params = request.get('params', {})
                     
@@ -274,7 +313,7 @@ class JellyfinEmitter:
                     
                     result = await self.handle_capability(capability, params)
                     
-                    await self.js.publish(reply_subject(request_id), json.dumps(result).encode())
+                    await self._publish_nats(self.js, reply_subject(request_id), result, "emitter.reply")
                     
                     self.event_count += 1
                 
@@ -286,18 +325,7 @@ class JellyfinEmitter:
     
     async def handle_capability(self, capability: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Handle capability requests"""
-        if capability == "media.playback":
-            return await self.get_playback_status(params)
-        elif capability == "media.library":
-            return await self.get_library(params)
-        elif capability == "media.search":
-            return await self.search_media(params)
-        elif capability == "playback.status":
-            return await self.get_playback_status(params)
-        elif capability == "library.items":
-            return await self.get_library_items(params)
-        else:
-            return {"error": f"Unknown capability: {capability}"}
+        return await self.audit.execute(self.dispatch, capability, params)
     
     async def get_playback_status(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Get current playback status"""
@@ -307,7 +335,7 @@ class JellyfinEmitter:
             "capability": "playback.status",
             "active_sessions": len(self.active_sessions),
             "sessions": list(self.active_sessions.values()),
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": utc_now_iso()
         }
     
     async def get_library(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -330,7 +358,7 @@ class JellyfinEmitter:
                         "agent": self.service_name,
                         "capability": "media.library",
                         "folders": folders.get('Items', []),
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": utc_now_iso()
                     }
                 else:
                     return {"error": f"Jellyfin returned {resp.status}"}
@@ -366,7 +394,7 @@ class JellyfinEmitter:
                         "capability": "media.search",
                         "query": query,
                         "results": results.get('SearchHints', []),
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": utc_now_iso()
                     }
                 else:
                     return {"error": f"Jellyfin returned {resp.status}"}
@@ -399,7 +427,7 @@ class JellyfinEmitter:
                         "capability": "library.items",
                         "items": items.get('Items', []),
                         "total": items.get('TotalRecordCount', 0),
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": utc_now_iso()
                     }
                 else:
                     return {"error": f"Jellyfin returned {resp.status}"}
@@ -407,6 +435,9 @@ class JellyfinEmitter:
         except Exception as e:
             logger.error(f"Error getting library items: {e}")
             return {"error": str(e)}
+
+    async def _publish_nats(self, target: Any, subject: str, payload: Dict[str, Any], capability: str) -> None:
+        await self.audit.publish_json(target, subject, payload, capability)
     
     async def run(self):
         """Main emitter loop"""

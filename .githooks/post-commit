@@ -1,24 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-LAST_COMMIT="$(git rev-parse HEAD)"
-INGEST_URL="${ARK_INGEST_URL:-http://127.0.0.1:8088/v1/ingest/git-commit}"
+ROOT="$(git rev-parse --show-toplevel)"
+COMMIT="$(git rev-parse HEAD)"
+QUEUE="$ROOT/.ark_ci/queue"
 
-if command -v jq >/dev/null 2>&1; then
-  payload="$(jq -n --arg rp "$REPO_ROOT" --arg cs "$LAST_COMMIT" '{repo_path:$rp,commit_sha:$cs}')"
-else
-  payload="$(printf '{"repo_path":"%s","commit_sha":"%s"}' "$REPO_ROOT" "$LAST_COMMIT")"
-fi
+mkdir -p "$ROOT/.ark_ci"
+echo "$COMMIT" >> "$QUEUE"
 
-if command -v curl >/dev/null 2>&1; then
-  curl --fail --silent --show-error \
-    --max-time 5 --connect-timeout 3 \
-    -H 'Content-Type: application/json' \
-    -X POST \
-    -d "$payload" \
-    "$INGEST_URL" >/dev/null
-  printf '[ARK-Field] ingested commit %s via %s\n' "$LAST_COMMIT" "$INGEST_URL"
-else
-  printf '[ARK-Field] curl missing; commit %s queued for manual ingest\n' "$LAST_COMMIT"
+echo "[ARK-Local] queued commit $COMMIT"
+
+# optional online ingest (non-blocking)
+INGEST_URL="${ARK_INGEST_URL:-}"
+if [[ -n "$INGEST_URL" ]] && command -v curl >/dev/null 2>&1; then
+  curl -s -X POST -H 'Content-Type: application/json' \
+    -d "{\"repo_path\":\"$ROOT\",\"commit_sha\":\"$COMMIT\"}" \
+    "$INGEST_URL" >/dev/null || true
 fi

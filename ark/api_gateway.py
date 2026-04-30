@@ -7,15 +7,14 @@ Routes to: Mesh, DuckDB, agents, storage
 import asyncio
 import json
 import logging
-import os
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 
 import aiohttp
-import nats
 from aiohttp import web
+from ark.config import load_gateway_config
 from ark.duck_client import DuckClient
-from ark.event_schema import create_event, EventType, EventSource
+from ark.event_schema import EventSource
+from ark.gsb import DuckGSBSink, GlobalStateBus, build_global_state_bus
 from ark.security import (
     auth_middleware,
     clamp_limit,
@@ -33,7 +32,10 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import RuntimeAudit
 from ark.subjects import call_subject
+from ark.time_utils import utc_now_iso, utc_timestamp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,16 +48,26 @@ class ARKGateway:
     """API Gateway for ARK system"""
     
     def __init__(self):
-        self.nats_url = os.environ.get('NATS_URL', 'nats://nats:4222')
-        self.mesh_url = os.environ.get('MESH_URL', 'http://ark-mesh:7000')
+        config = load_gateway_config()
+        self.nats_url = config.nats_url
+        self.mesh_url = config.mesh_url
         self._nats = ResilientNATSConnection(self.nats_url)
         self.nc = None
         self.js = None
         self.db = DuckClient()
+        self.gsb: GlobalStateBus = build_global_state_bus(DuckGSBSink(self.db))
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.ARK_CORE.value,
+            surface="gateway",
+            default_tags={"surface": "gateway"},
+        )
+        self.contracts = runtime_contract_registry()
         self.shutdown = ShutdownCoordinator()
         self.health = HealthCheck("ark-gateway")
         self.health.register("nats", lambda: self._nats.is_connected)
         self.health.register("db", lambda: self.db.conn is not None)
+        self.health.register("gsb", lambda: self.gsb.health()["enabled"])
         self._http_session: Optional[aiohttp.ClientSession] = None
         
         logger.info("ARK Gateway initialized")
@@ -79,12 +91,18 @@ class ARKGateway:
     
     async def handle_health(self, request: web.Request) -> web.Response:
         """GET /api/health - Liveness / readiness probe"""
+        blocked = self._record_gsb(request, "gateway.health", "gateway.health.query", {})
+        if blocked:
+            return blocked
         status = self.health.check()
         code = 200 if status["healthy"] else 503
         return web.json_response(status, status=code)
 
     async def handle_mesh_status(self, request: web.Request) -> web.Response:
         """GET /api/mesh - Get mesh registry status"""
+        blocked = self._record_gsb(request, "gateway.mesh", "gateway.mesh.status", {})
+        if blocked:
+            return blocked
         try:
             session = await self._get_session()
             async with session.get(f"{self.mesh_url}/api/mesh") as resp:
@@ -101,6 +119,9 @@ class ARKGateway:
             validate_service_name(service)
         except ValueError:
             return web.json_response({"error": "invalid service name"}, status=400)
+        blocked = self._record_gsb(request, "gateway.service", "gateway.service.info", {"service": service})
+        if blocked:
+            return blocked
         try:
             session = await self._get_session()
             async with session.get(f"{self.mesh_url}/api/service/{service}") as resp:
@@ -117,6 +138,9 @@ class ARKGateway:
             validate_capability(capability)
         except ValueError:
             return web.json_response({"error": "invalid capability"}, status=400)
+        blocked = self._record_gsb(request, "gateway.route", capability, {})
+        if blocked:
+            return blocked
         try:
             session = await self._get_session()
             async with session.get(f"{self.mesh_url}/api/route/{capability}") as resp:
@@ -135,48 +159,22 @@ class ARKGateway:
             return web.json_response({"error": "invalid capability"}, status=400)
         
         try:
-            body = await request.json()
-            request_id = sanitize_string(body.get('request_id', '').strip(), 128) or None
-            params = validate_payload(body.get('params', {}))
-            
-            # Route capability
-            session = await self._get_session()
-            async with session.get(f"{self.mesh_url}/api/route/{capability}") as resp:
-                if resp.status != 200:
-                    return web.json_response({"error": "No service available"}, status=404)
-                route = await resp.json()
-            
-            service = route.get('service')
-            instance_id = route.get('instance_id')
-            
-            if not service:
+            request_id, params = await self._parse_call_body(request)
+            blocked = self._record_gsb(request, "gateway.call", capability, {"params": params})
+            if blocked:
+                return blocked
+            route = await self._fetch_route(capability)
+            if route is None:
+                return web.json_response({"error": "No service available"}, status=404)
+            service, instance_id = route.get('service'), route.get('instance_id')
+            if not service or not instance_id:
                 return web.json_response({"error": "No route available"}, status=404)
-            
-            # Publish capability call
-            call_msg = {
-                "request_id": request_id or f"req-{instance_id}-{int(datetime.utcnow().timestamp())}",
-                "service": service,
-                "instance_id": instance_id,
-                "capability": capability,
-                "params": params
-            }
-            
-            await self.nc.publish(
-                call_subject(service, capability),
-                json.dumps(call_msg).encode()
-            )
-            
+            call_msg = self._build_call_msg(request_id, service, instance_id, capability, params)
+            await self._publish_call(call_msg)
             logger.info(f"Routed capability {capability} to {service}/{instance_id}")
-            
-            return web.json_response({
-                "request_id": call_msg['request_id'],
-                "service": service,
-                "instance_id": instance_id,
-                "capability": capability,
-                "status": "queued"
-            })
+            return web.json_response(self._queued_response(call_msg))
         
-        except Exception as e:
+        except Exception:
             logger.exception("Capability call error")
             return web.json_response({"error": "capability call failed"}, status=500)
     
@@ -190,6 +188,14 @@ class ARKGateway:
             if event_type:
                 event_type = sanitize_string(event_type, 64)
             limit = clamp_limit(request.rel_url.query.get('limit', 100))
+            blocked = self._record_gsb(
+                request,
+                "gateway.events",
+                "gateway.events.query",
+                {"source": source or "", "event_type": event_type or "", "limit": limit},
+            )
+            if blocked:
+                return blocked
             
             events = self.db.query_events(source, event_type, limit)
             
@@ -205,6 +211,14 @@ class ARKGateway:
         """GET /api/metrics/{source} - Get latest LKS metrics"""
         source = sanitize_string(request.match_info.get('source', ''), 128)
         limit = clamp_limit(request.rel_url.query.get('limit', 10), default=10, ceiling=1000)
+        blocked = self._record_gsb(
+            request,
+            "gateway.metrics",
+            "gateway.metrics.query",
+            {"source": source, "limit": limit},
+        )
+        if blocked:
+            return blocked
         
         try:
             metrics = self.db.get_latest_lks(source, limit)
@@ -219,6 +233,9 @@ class ARKGateway:
     
     async def handle_system_status(self, request: web.Request) -> web.Response:
         """GET /api/status - Overall system status"""
+        blocked = self._record_gsb(request, "gateway.status", "gateway.status.query", {})
+        if blocked:
+            return blocked
         try:
             # Mesh status
             mesh_data = None
@@ -233,7 +250,7 @@ class ARKGateway:
             db_data = self.db.get_mesh_status()
             
             return web.json_response({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": utc_now_iso(),
                 "mesh": mesh_data or {"error": "unavailable"},
                 "database": db_data,
                 "gateway": "healthy"
@@ -300,6 +317,88 @@ class ARKGateway:
                 await self._http_session.close()
             await self._nats.close()
             logger.info("Gateway shutdown complete")
+
+    def _record_gsb(
+        self,
+        request: web.Request,
+        action: str,
+        capability: str,
+        payload: dict[str, object],
+    ) -> web.Response | None:
+        error = self.audit.record(
+            action,
+            capability,
+            {**self._request_payload(request), **payload},
+        )
+        if error is None:
+            return None
+        return web.json_response(error, status=500)
+
+    def _request_payload(self, request: web.Request) -> dict[str, object]:
+        return {
+            "method": request.method,
+            "path": request.path,
+            "request_id": sanitize_string(str(request.get("request_id", "")), 128),
+        }
+
+    async def _parse_call_body(self, request: web.Request) -> tuple[str | None, dict[str, object]]:
+        body = self.contracts.materialize_payload("runtime.gateway.call_body", await request.json())
+        request_id = sanitize_string(str(body.get('request_id', '')).strip(), 128) or None
+        return request_id, validate_payload(body.get('params', {}))
+
+    async def _fetch_route(self, capability: str) -> dict[str, object] | None:
+        session = await self._get_session()
+        async with session.get(f"{self.mesh_url}/api/route/{capability}") as resp:
+            if resp.status != 200:
+                return None
+            return await resp.json()
+
+    def _build_call_msg(
+        self,
+        request_id: str | None,
+        service: str,
+        instance_id: str,
+        capability: str,
+        params: dict[str, object],
+    ) -> dict[str, object]:
+        return self.contracts.materialize_payload(
+            "runtime.capability.call_message",
+            {
+            "request_id": request_id or f"req-{instance_id}-{utc_timestamp()}",
+            "service": service,
+            "instance_id": instance_id,
+            "capability": capability,
+            "params": params,
+            },
+        )
+
+    async def _publish_call(self, call_msg: dict[str, object]) -> None:
+        await self._publish_nats(
+            self.nc,
+            call_subject(str(call_msg["service"]), str(call_msg["capability"])),
+            call_msg,
+            str(call_msg["capability"]),
+        )
+
+    async def _publish_nats(
+        self,
+        target: object,
+        subject: str,
+        payload: dict[str, object],
+        capability: str,
+    ) -> None:
+        error = await self.audit.publish_json(target, subject, payload, capability)
+        if error:
+            raise RuntimeError(error["reason"])
+
+    def _queued_response(self, call_msg: dict[str, object]) -> dict[str, object]:
+        return {
+            "request_id": call_msg["request_id"],
+            "service": call_msg["service"],
+            "instance_id": call_msg["instance_id"],
+            "capability": call_msg["capability"],
+            "status": "queued",
+        }
 
 
 async def main():

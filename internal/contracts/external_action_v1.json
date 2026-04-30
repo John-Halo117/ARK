@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ark/contracts/external_action_v1",
+  "type": "object",
+  "required": ["action", "allowed", "timestamp"],
+  "properties": {
+    "action": {"type": "string"},
+    "allowed": {"type": "boolean"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "result": {"type": "object"}
+  }
+}

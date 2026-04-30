@@ -7,17 +7,18 @@ Monitors queue depth, latency, and capability demand
 import asyncio
 import json
 import logging
+from pathlib import Path
 import subprocess
 import uuid
-from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List
 
-import nats
-from nats.errors import Error as NATSError
+try:
+    from nats.errors import Error as NATSError
+except ImportError:  # pragma: no cover - local import/test environments
+    NATSError = RuntimeError
 
 from ark.security import (
     build_safe_docker_cmd,
-    sanitize_string,
     validate_docker_arg,
     validate_service_name,
 )
@@ -26,11 +27,18 @@ from ark.maintenance import (
     ResilientNATSConnection,
     ShutdownCoordinator,
 )
+from ark.event_schema import EventSource
+from ark.gsb import GlobalStateBus, build_global_state_bus
 from ark.subjects import (
     SYSTEM_QUEUE_DEPTH_SUBSCRIBE, SYSTEM_LATENCY_SUBSCRIBE,
     SYSTEM_ASHI, SPAWN_CONFIRMED,
-    parse_service_from_queue_depth,
+    parse_service_from_system_subject,
 )
+from ark.policy_engine import load_policy_set
+from ark.reducers import AutoscalerViewReducer, ReducerEngine
+from ark.runtime_contracts import runtime_contract_registry
+from ark.runtime_flow import RuntimeAudit
+from ark.time_utils import utc_now_iso
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,51 +51,37 @@ class Autoscaler:
     """Dynamic compute spawner based on demand signals"""
     
     def __init__(self, nats_url: str = "nats://nats:4222", 
-                 docker_sock: str = "/var/run/docker.sock"):
+                 docker_sock: str = "/var/run/docker.sock",
+                 gsb: GlobalStateBus | None = None):
         self.nats_url = nats_url
         self.docker_sock = docker_sock
         self._nats = ResilientNATSConnection(nats_url)
         self.nc = None
         self.js = None
+        self.gsb = gsb or build_global_state_bus()
+        self.audit = RuntimeAudit(
+            self.gsb,
+            source=EventSource.ARK_CORE.value,
+            surface="autoscaler",
+            default_tags={"surface": "autoscaler"},
+        )
+        self.contracts = runtime_contract_registry()
+        self.scaling_policy = load_policy_set(Path(__file__).resolve().parents[1] / "policy" / "autoscaler_rules.json")
         self.shutdown = ShutdownCoordinator()
         self.health = HealthCheck("ark-autoscaler")
         self.health.register("nats", lambda: self._nats.is_connected)
+        self.health.register("gsb", lambda: self.gsb.health()["enabled"])
+        self.reducer_engine = ReducerEngine((AutoscalerViewReducer(),))
+        self.health.register("reducers", lambda: self.reducer_engine.health()["healthy"])
         
         # Spawn config
-        self.spawn_config = {
-            "opencode": {
-                "image": "ark-opencode:latest",
-                "cpu_limit": "1",
-                "memory_limit": "1G",
-                "min_instances": 1,
-                "max_instances": 5,
-                "queue_threshold": 10,
-                "latency_threshold": 1000  # ms
-            },
-            "openwolf": {
-                "image": "ark-openwolf:latest",
-                "cpu_limit": "0.5",
-                "memory_limit": "512M",
-                "min_instances": 1,
-                "max_instances": 3,
-                "queue_threshold": 20,
-                "latency_threshold": 500
-            },
-            "composio": {
-                "image": "ark-composio:latest",
-                "cpu_limit": "1",
-                "memory_limit": "1G",
-                "min_instances": 1,
-                "max_instances": 10,
-                "queue_threshold": 50,
-                "latency_threshold": 2000
-            }
-        }
+        self.spawn_config = dict(self.scaling_policy.extras.get("services", {}))
         
         # Service state
-        self.service_instances: Dict[str, List[str]] = {}
-        self.service_demand: Dict[str, float] = {}
-        self.service_latency: Dict[str, float] = {}
+        autoscaler_view = self.reducer_engine.view("autoscaler.runtime")
+        self.service_instances: Dict[str, List[str]] = autoscaler_view["instances"]
+        self.service_demand: Dict[str, float] = autoscaler_view["demand"]
+        self.service_latency: Dict[str, float] = autoscaler_view["latency"]
         
         logger.info("ARK Autoscaler initialized")
     
@@ -99,47 +93,69 @@ class Autoscaler:
     
     async def monitor_demand(self):
         """Listen for demand signals"""
-        try:
-            sub = await self.nc.subscribe(SYSTEM_QUEUE_DEPTH_SUBSCRIBE)
-            logger.info("Subscribed to demand signals")
-            
-            async for msg in sub.messages:
-                try:
-                    service = parse_service_from_queue_depth(msg.subject)
-                    
-                    event = json.loads(msg.data.decode())
-                    depth = event.get('depth', 0)
-                    
-                    self.service_demand[service] = depth
-                    
-                    # Check if scaling needed
-                    await self.check_scaling(service)
-                
-                except Exception as e:
-                    logger.error(f"Error processing demand signal: {e}")
-        
-        except NATSError as e:
-            logger.error(f"Subscription error: {e}")
+        await self._monitor_system_signal(
+            pattern=SYSTEM_QUEUE_DEPTH_SUBSCRIBE,
+            signal_name="queue_depth",
+            callback=self._on_queue_depth_signal,
+            subscription_label="demand signals",
+        )
     
     async def monitor_latency(self):
         """Listen for latency signals"""
+        await self._monitor_system_signal(
+            pattern=SYSTEM_LATENCY_SUBSCRIBE,
+            signal_name="latency",
+            callback=self._on_latency_signal,
+            subscription_label="latency signals",
+        )
+
+    async def _monitor_system_signal(self, pattern: str, signal_name: str, callback, subscription_label: str):
+        """Shared pub/sub monitor for ark.system.* subjects."""
         try:
-            sub = await self.nc.subscribe(SYSTEM_LATENCY_SUBSCRIBE)
-            
+            sub = await self.nc.subscribe(pattern)
+            logger.info("Subscribed to %s", subscription_label)
+
             async for msg in sub.messages:
                 try:
-                    service = parse_service_from_queue_depth(msg.subject)
-                    
+                    service = parse_service_from_system_subject(msg.subject, expected_signal=signal_name)
+                    if service == "unknown":
+                        logger.warning("Ignoring malformed subject: %s", msg.subject)
+                        continue
                     event = json.loads(msg.data.decode())
-                    latency = event.get('latency_ms', 0)
-                    
-                    self.service_latency[service] = latency
-                
+                    if not isinstance(event, dict):
+                        logger.warning("Ignoring malformed payload for %s: %r", msg.subject, event)
+                        continue
+                    await callback(service, event)
+                except json.JSONDecodeError:
+                    logger.warning("Ignoring invalid JSON payload for subject: %s", msg.subject)
                 except Exception as e:
-                    logger.error(f"Error processing latency signal: {e}")
-        
+                    logger.error("Error processing %s signal: %s", signal_name, e)
+
         except NATSError as e:
-            logger.error(f"Subscription error: {e}")
+            logger.error("Subscription error on %s: %s", pattern, e)
+
+    async def _on_queue_depth_signal(self, service: str, event: dict):
+        """Handle queue depth signal and trigger scaling decisions."""
+        depth = event.get('depth', 0)
+        if not isinstance(depth, (int, float)) or depth < 0:
+            logger.warning("Ignoring invalid depth for %s: %r", service, depth)
+            return
+        self.reducer_engine.apply(
+            "autoscaler.demand",
+            {"service": service, "depth": depth},
+        )
+        await self.check_scaling(service)
+
+    async def _on_latency_signal(self, service: str, event: dict):
+        """Handle latency signal."""
+        latency = event.get('latency_ms', 0)
+        if not isinstance(latency, (int, float)) or latency < 0:
+            logger.warning("Ignoring invalid latency for %s: %r", service, latency)
+            return
+        self.reducer_engine.apply(
+            "autoscaler.latency",
+            {"service": service, "latency_ms": latency},
+        )
     
     async def check_scaling(self, service: str):
         """Check if service needs scaling"""
@@ -151,18 +167,32 @@ class Autoscaler:
         latency = self.service_latency.get(service, 0)
         instance_count = len(self.service_instances.get(service, []))
         
-        # Scale up if demand high
-        if demand > config['queue_threshold'] and instance_count < config['max_instances']:
-            logger.info(f"Scaling up {service}: demand={demand}, instances={instance_count}")
+        decision = self.scaling_policy.evaluate(
+            {
+                "service": service,
+                "demand": demand,
+                "latency": latency,
+                "instance_count": instance_count,
+                "queue_threshold": config['queue_threshold'],
+                "latency_threshold": config['latency_threshold'],
+                "min_instances": config['min_instances'],
+                "max_instances": config['max_instances'],
+            }
+        )
+        self.reducer_engine.apply(
+            "autoscaler.decision",
+            {"service": service, "decision": decision.decision},
+        )
+        self.audit.record(
+            "decision",
+            "autoscaler.scale",
+            {"service": service, "decision": decision.decision, "rule": decision.rule_name},
+        )
+
+        if decision.decision == "scale_up":
+            logger.info(f"Scaling up {service}: demand={demand}, latency={latency}, instances={instance_count}")
             await self.spawn_instance(service)
-        
-        # Scale up if latency high
-        elif latency > config['latency_threshold'] and instance_count < config['max_instances']:
-            logger.info(f"Scaling up {service}: latency={latency}ms, instances={instance_count}")
-            await self.spawn_instance(service)
-        
-        # Scale down if idle
-        elif demand == 0 and instance_count > config['min_instances']:
+        elif decision.decision == "scale_down":
             logger.info(f"Scaling down {service}: idle, instances={instance_count}")
             await self.terminate_instance(service)
     
@@ -180,6 +210,8 @@ class Autoscaler:
         config = self.spawn_config[service]
         instance_id = str(uuid.uuid4())[:12]
         container_name = f"ark-{service}-{instance_id}"
+        if self.audit.record("spawn.request", "autoscaler.spawn.request", {"service": service}):
+            return ""
         
         try:
             cmd = build_safe_docker_cmd(
@@ -200,20 +232,20 @@ class Autoscaler:
             if result.returncode == 0:
                 container_id = result.stdout.strip()
                 
-                if service not in self.service_instances:
-                    self.service_instances[service] = []
-                
-                self.service_instances[service].append(container_id)
+                self.reducer_engine.apply(
+                    "autoscaler.instance_spawned",
+                    {"service": service, "container_id": container_id},
+                )
                 
                 logger.info(f"Spawned {service}/{instance_id}: {container_id}")
                 
                 # Publish spawn event
-                await self.js.publish(SPAWN_CONFIRMED, json.dumps({
+                await self._publish_nats(self.js, SPAWN_CONFIRMED, {
                     "service": service,
                     "instance_id": instance_id,
                     "container_id": container_id,
-                    "timestamp": datetime.utcnow().isoformat()
-                }).encode())
+                    "timestamp": utc_now_iso()
+                }, "autoscaler.spawn.confirmed")
                 
                 return container_id
             else:
@@ -230,7 +262,7 @@ class Autoscaler:
         if not instances:
             return
         
-        container_id = instances.pop()
+        container_id = instances[-1]
         
         try:
             # Validate container_id to prevent injection
@@ -240,6 +272,10 @@ class Autoscaler:
             
             if result.returncode == 0:
                 logger.info("Terminated %s: %s", service, container_id)
+                self.reducer_engine.apply(
+                    "autoscaler.instance_terminated",
+                    {"service": service, "container_id": container_id},
+                )
                 subprocess.run(
                     ["docker", "rm", container_id],
                     capture_output=True, text=True, timeout=5,
@@ -247,6 +283,11 @@ class Autoscaler:
         
         except Exception as e:
             logger.error(f"Termination error for {service}: {e}")
+
+    async def _publish_nats(self, target: object, subject: str, payload: Dict[str, object], capability: str) -> None:
+        error = await self.audit.publish_json(target, subject, payload, capability)
+        if error:
+            return
     
     async def monitor_ashi(self):
         """Listen for ASHI (System Health Index) degradation signals"""

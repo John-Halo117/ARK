@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ark/contracts/event_v1",
+  "title": "ARK Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "event_type", "event_id", "state_hash", "sequence", "created_at"],
+  "properties": {
+    "version": {"type": "string", "const": "v1"},
+    "event_type": {"type": "string", "minLength": 1},
+    "event_id": {"type": "string", "minLength": 1},
+    "state_hash": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 0},
+    "created_at": {"type": "string", "format": "date-time"},
+    "cid": {"type": "string"},
+    "payload": {"type": "object"}
+  }
+}

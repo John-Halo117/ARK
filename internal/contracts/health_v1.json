@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ark/contracts/health_v1",
+  "type": "object",
+  "required": ["service", "status", "timestamp"],
+  "properties": {
+    "service": {"type": "string"},
+    "status": {"type": "string", "enum": ["healthy", "degraded", "unhealthy"]},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "details": {"type": "object"}
+  }
+}

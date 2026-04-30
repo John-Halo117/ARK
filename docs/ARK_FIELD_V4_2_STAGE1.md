@@ -34,6 +34,3 @@
 ```bash
 git config core.hooksPath .githooks
 ```
-
-
-- Restored original ARK `docker-compose.yml` service set and appended ARK-Field stage services (`redis`, `stability-kernel`, `ingestion-leader`, `netwatch`, `wireguard`) without removing legacy services.

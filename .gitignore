@@ -13,6 +13,7 @@ Thumbs.db
 *.swo
 *~
 .pytest_cache/
+.forge/
 .coverage
 htmlcov/
 dist/
