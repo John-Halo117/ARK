@@ -4,4 +4,8 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir duckdb
 
-CMD ["python", "-c", "import duckdb, time; conn = duckdb.connect('/data/ark.duckdb'); conn.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, type VARCHAR, payload JSON, created_at TIMESTAMP DEFAULT now())'); conn.execute('CREATE TABLE IF NOT EXISTS state (key VARCHAR PRIMARY KEY, value JSON, updated_at TIMESTAMP DEFAULT now())'); conn.execute('CREATE TABLE IF NOT EXISTS metrics (name VARCHAR, value DOUBLE, timestamp TIMESTAMP, sample_time TIMESTAMP DEFAULT now())'); print('[DuckDB] Ready'); [time.sleep(1) for _ in iter(int, 1)]"]
+VOLUME ["/data"]
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+  CMD python -c "import duckdb; conn = duckdb.connect('/data/ark.duckdb'); conn.execute('SELECT 1').fetchone(); conn.close()" || exit 1
+
+CMD ["python", "-c", "import duckdb, signal; conn = duckdb.connect('/data/ark.duckdb'); conn.execute('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, type VARCHAR, payload JSON, created_at TIMESTAMP DEFAULT now())'); conn.execute('CREATE TABLE IF NOT EXISTS state (key VARCHAR PRIMARY KEY, value JSON, updated_at TIMESTAMP DEFAULT now())'); conn.execute('CREATE TABLE IF NOT EXISTS metrics (name VARCHAR, value DOUBLE, timestamp TIMESTAMP, sample_time TIMESTAMP DEFAULT now())'); conn.close(); print('[DuckDB] Ready', flush=True); signal.pause()"]

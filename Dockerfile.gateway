@@ -3,17 +3,21 @@ FROM python:3.11-slim
 WORKDIR /app
 
 RUN pip install --no-cache-dir \
-    aiohttp==3.9.1 \
+    "aiohttp>=3.10.11,<4" \
     nats-py==2.4.0 \
-    duckdb==0.10 \
-    aiofiles==23.2.0
+    "duckdb>=0.10,<1" \
+    "aiofiles>=23.2.0,<25"
 
 COPY ark/ ./ark/
+COPY internal/contracts/ ./internal/contracts/
+COPY policy/ ./policy/
 
 ENV PYTHONUNBUFFERED=1 \
     NATS_URL=nats://nats:4222 \
-    MESH_URL=http://ark-mesh:7000
+    MESH_URL=http://mesh-registry:7000
 
 EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=2).read()" || exit 1
 
 CMD ["python", "-m", "ark.api_gateway"]
