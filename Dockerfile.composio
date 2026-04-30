@@ -1,8 +1,14 @@
 FROM python:3.11-slim
 WORKDIR /app
-RUN pip install --no-cache-dir nats-py
-COPY agents/composio/agent.py /app/agent.py
+RUN pip install --no-cache-dir \
+    "aiohttp>=3.10.11,<4" \
+    nats-py==2.4.0
+COPY ark/ ./ark/
+COPY agents/ ./agents/
+COPY internal/contracts/ ./internal/contracts/
+COPY policy/ ./policy/
 ENV INSTANCE_ID=composio-base
 ENV NATS_URL=nats://nats:4222
 ENV COMPOSIO_API_KEY=
-CMD ["python", "/app/agent.py"]
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-c", "import asyncio\nfrom agents.aider.agent import AiderAgent\nasync def main():\n    agent = AiderAgent('composio')\n    await agent.connect()\n    await agent.register()\n    await asyncio.gather(agent.heartbeat_loop(), agent.subscribe_calls())\nasyncio.run(main())"]
