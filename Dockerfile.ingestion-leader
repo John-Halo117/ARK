@@ -1,11 +1,17 @@
-FROM golang:1.23-alpine AS build
+FROM golang:1.24-alpine AS build
 WORKDIR /src
 COPY go.mod ./
 COPY cmd ./cmd
 COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/ingestion-leader ./cmd/ingestion-leader
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates wget \
+    && addgroup -S ark \
+    && adduser -S -G ark -H -h /nonexistent ark
 COPY --from=build /out/ingestion-leader /usr/local/bin/ingestion-leader
+USER ark
 EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+  CMD wget --spider -q http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["/usr/local/bin/ingestion-leader"]
