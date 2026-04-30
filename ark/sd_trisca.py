@@ -56,7 +56,13 @@ class TRISCAResult:
         }
 
 
-def compute_trisca(observations: Sequence[float], *, age_seconds: float = 0.0) -> TRISCAResult:
+def compute_trisca(
+    observations: Sequence[float],
+    *,
+    age_seconds: float = 0.0,
+    output_value: float | None = None,
+    cost_value: float | None = None,
+) -> TRISCAResult:
     """Compute S[6] through a single deterministic path.
 
     Runtime: O(6). Memory: O(1). Failure: ValueError for non-finite or oversized input.
@@ -64,19 +70,21 @@ def compute_trisca(observations: Sequence[float], *, age_seconds: float = 0.0) -
 
     if len(observations) > MAX_OBSERVATIONS:
         raise ValueError(f"observations exceed bound: {MAX_OBSERVATIONS}")
-    values = [0.0] * MAX_OBSERVATIONS
+    raw_values = [0.0] * MAX_OBSERVATIONS
     for index in range(min(len(observations), MAX_OBSERVATIONS)):
         sample = float(observations[index])
         if not isfinite(sample):
             raise ValueError(f"observation is not finite at index {index}")
-        values[index] = _clamp01(sample)
+        raw_values[index] = abs(sample)
 
+    scale = max(raw_values) or 1.0
+    values = [_clamp01(value / scale) for value in raw_values]
     structure = sum(values) / MAX_OBSERVATIONS
-    entropy = _entropy(values)
+    entropy = _entropy(_variation(values))
     inequality = max(values) - min(values)
     temporal = _clamp01(1.0 / (1.0 + abs(float(age_seconds))))
-    efficiency = _clamp01(1.0 - ((entropy + inequality) / 2.0))
-    signal_density = sum(1 for value in values if value > 0.0) / MAX_OBSERVATIONS
+    efficiency = _efficiency(entropy, inequality, output_value, cost_value)
+    signal_density = _clamp01(1.0 - entropy)
     confidence = _clamp01((structure + efficiency + signal_density + (1.0 - inequality)) / 4.0)
     return TRISCAResult(
         s=SVector(structure, entropy, inequality, temporal, efficiency, signal_density),
@@ -95,6 +103,21 @@ def _entropy(values: Sequence[float]) -> float:
         if probability > 0.0:
             value -= probability * log(probability)
     return _clamp01(value / log(MAX_OBSERVATIONS))
+
+
+def _variation(values: Sequence[float]) -> tuple[float, ...]:
+    diffs = [0.0] * MAX_OBSERVATIONS
+    for index in range(1, min(len(values), MAX_OBSERVATIONS)):
+        diffs[index - 1] = abs(values[index] - values[index - 1])
+    return tuple(diffs)
+
+
+def _efficiency(entropy: float, inequality: float, output_value: float | None, cost_value: float | None) -> float:
+    if output_value is not None and cost_value is not None:
+        output = max(0.0, float(output_value))
+        cost = max(0.0, float(cost_value))
+        return _clamp01(output / (output + cost + 1e-9))
+    return _clamp01(1.0 - ((entropy + inequality) / 2.0))
 
 
 def _clamp01(value: float) -> float:

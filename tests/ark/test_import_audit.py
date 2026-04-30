@@ -11,6 +11,8 @@ def test_import_registry_loads_current_manifest():
 
     assert "ark" in registry.allowed_roots
     assert "aiohttp" in registry.third_party_roots
+    assert "ark" in registry.audit_policy.scan_roots
+    assert "__pycache__" in registry.audit_policy.excluded_dir_names
     assert registry.health()["ok"] is True
     assert registry.library_candidates
 
@@ -20,6 +22,8 @@ def test_import_audit_passes_current_repo():
 
     assert report.status == "ok"
     assert "ark" in report.observed_roots
+    assert report.audit_policy.max_files > 0
+    assert report.library_assessments
     assert report.health()["ok"] is True
 
 
@@ -33,6 +37,16 @@ def test_import_audit_detects_unregistered_import(tmp_path):
                 "stdlib_roots": ["json"],
                 "third_party_roots": [],
                 "internal_roots": [],
+                "audit_policy": {
+                    "scan_roots": ["pkg"],
+                    "excluded_dir_names": ["__pycache__"],
+                    "max_files": 8,
+                    "max_file_bytes": 4096,
+                    "max_ast_nodes": 128,
+                    "max_dirs": 8,
+                    "max_dir_entries": 128,
+                    "max_library_candidates": 4,
+                },
                 "library_candidates": [],
             }
         ),
@@ -46,10 +60,6 @@ def test_import_audit_detects_unregistered_import(tmp_path):
         ImportAuditConfig(
             repo_root=tmp_path,
             registry_path=registry_path,
-            scan_roots=("pkg",),
-            max_files=8,
-            max_file_bytes=4096,
-            max_ast_nodes=128,
         )
     )
 

@@ -1,5 +1,29 @@
 {
   "version": "2026-04-27",
+  "audit_policy": {
+    "scan_roots": [
+      "ark",
+      "emitters",
+      "agents",
+      "scripts",
+      "tests",
+      "conftest.py"
+    ],
+    "excluded_dir_names": [
+      ".git",
+      ".pytest_cache",
+      ".ruff_cache",
+      "__pycache__",
+      "src",
+      "vendor"
+    ],
+    "max_files": 512,
+    "max_file_bytes": 131072,
+    "max_ast_nodes": 20000,
+    "max_dirs": 2048,
+    "max_dir_entries": 4096,
+    "max_library_candidates": 32
+  },
   "allowed_roots": [
     "__future__",
     "agents",
@@ -31,6 +55,7 @@
     "statistics",
     "subprocess",
     "sys",
+    "tempfile",
     "time",
     "typing",
     "unittest",
@@ -72,6 +97,7 @@
     "statistics",
     "subprocess",
     "sys",
+    "tempfile",
     "time",
     "typing",
     "unittest",

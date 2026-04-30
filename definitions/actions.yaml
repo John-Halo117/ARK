@@ -1,3 +1,10 @@
-actions:
-  - name: record
-    adapter: memory
+reduce_load: {adapter: system, payload: {mode: throttle}}
+increase_focus: {adapter: system, payload: {mode: focus}}
+optimize_path: {adapter: system, payload: {mode: optimize}}
+refresh_state: {adapter: system, payload: {mode: refresh}}
+rebalance: {adapter: system, payload: {mode: rebalance}}
+stabilize: {adapter: system, payload: {mode: stabilize}}
+scale_up: {adapter: system, payload: {mode: scale}}
+prune_noise: {adapter: system, payload: {mode: prune}}
+redirect_resources: {adapter: system, payload: {mode: redirect}}
+maintain: {adapter: system, payload: {mode: hold}}

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARK Console</title>
+    <link rel="stylesheet" href="/console/assets/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="mark">A</span>
+          <div>
+            <h1>ARK</h1>
+            <p>Local Console</p>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Console sections">
+          <button class="nav-item active" data-view="overview" type="button">Overview</button>
+          <button class="nav-item" data-view="events" type="button">Events</button>
+          <button class="nav-item" data-view="agents" type="button">Agents</button>
+          <button class="nav-item" data-view="trace" type="button">Trace</button>
+          <button class="nav-item" data-view="config" type="button">Config</button>
+        </nav>
+        <section class="panel compact">
+          <span class="label">Console Health</span>
+          <strong id="sidebarStatus">booting</strong>
+          <small id="sidebarDetail">Waiting for first bounded read.</small>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <span class="label">Runtime surface</span>
+            <h2 id="viewTitle">Overview</h2>
+          </div>
+          <div class="actions">
+            <button id="refreshButton" class="icon-button" type="button" title="Refresh">Refresh</button>
+          </div>
+        </header>
+
+        <section id="overview" class="view active">
+          <div class="status-grid" id="serviceGrid"></div>
+          <div class="split">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Mesh Snapshot</h3>
+                <span id="meshStamp" class="pill">pending</span>
+              </div>
+              <pre id="meshJson" class="code-block">{}</pre>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Caps</h3>
+              </div>
+              <dl id="capsList" class="kv"></dl>
+            </section>
+          </div>
+        </section>
+
+        <section id="events" class="view">
+          <form id="eventFilters" class="toolbar">
+            <label>
+              Source
+              <input name="source" placeholder="emitter.homeassistant" />
+            </label>
+            <label>
+              Type
+              <input name="type" placeholder="status" />
+            </label>
+            <label>
+              Limit
+              <input name="limit" type="number" min="1" max="200" value="50" />
+            </label>
+            <button type="submit">Load</button>
+            <button id="nextEvents" type="button" disabled>Next</button>
+          </form>
+          <div id="eventList" class="event-list"></div>
+        </section>
+
+        <section id="agents" class="view">
+          <div id="agentList" class="agent-list"></div>
+        </section>
+
+        <section id="trace" class="view">
+          <div class="split trace-layout">
+            <form id="traceForm" class="panel form-panel">
+              <div class="panel-head">
+                <h3>Decision Preview</h3>
+                <span class="pill">no action execution</span>
+              </div>
+              <label>
+                Event ID
+                <input name="id" value="console-preview-1" required />
+              </label>
+              <label>
+                Kind
+                <input name="kind" value="status" required />
+              </label>
+              <label>
+                Entity ID
+                <input name="entity_id" value="console.preview" required />
+              </label>
+              <label>
+                Schema Version
+                <input name="schema_version" value="v1" required />
+              </label>
+              <label>
+                Payload JSON
+                <textarea name="payload" spellcheck="false">{"surface":"console","mode":"preview"}</textarea>
+              </label>
+              <label>
+                Observations
+                <input name="observations" value="0.7,0.6,0.4,0.5,0.8,0.6" />
+              </label>
+              <label>
+                Hash
+                <input name="hash" readonly />
+              </label>
+              <button type="submit">Preview Trace</button>
+            </form>
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Trace Output</h3>
+              </div>
+              <pre id="traceOutput" class="code-block">{}</pre>
+            </section>
+          </div>
+        </section>
+
+        <section id="config" class="view">
+          <div class="split">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Read-only Files</h3>
+              </div>
+              <div id="configList" class="config-list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <h3 id="configTitle">Select a file</h3>
+                <span class="pill">read only</span>
+              </div>
+              <pre id="configContent" class="code-block"></pre>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/console/assets/app.js" defer></script>
+  </body>
+</html>

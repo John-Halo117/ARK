@@ -1,6 +1,8 @@
 package meta
 
 import (
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,14 +16,18 @@ const (
 )
 
 type Rule struct {
-	ID     string         `json:"id"`
-	When   string         `json:"when"`
-	Patch  map[string]any `json:"patch"`
-	Reason string         `json:"reason"`
+	ID       string         `json:"id" yaml:"id"`
+	When     string         `json:"when" yaml:"when"`
+	If       string         `json:"if" yaml:"if"`
+	Patch    map[string]any `json:"patch" yaml:"patch"`
+	Reason   string         `json:"reason" yaml:"reason"`
+	Prune    bool           `json:"prune" yaml:"prune"`
+	Reweight float64        `json:"reweight" yaml:"reweight"`
+	Merge    bool           `json:"merge" yaml:"merge"`
 }
 
 type Table struct {
-	Rules []Rule `json:"rules"`
+	Rules []Rule `json:"rules" yaml:"rules"`
 }
 
 type Engine struct {
@@ -35,12 +41,38 @@ func NewEngine(table Table) (*Engine, error) {
 		return nil, core.NewFailure("META_TABLE_TOO_LARGE", "meta table exceeds bounded rule count", map[string]any{"max_rules": MaxRules}, false)
 	}
 	for i := 0; i < len(table.Rules) && i < MaxRules; i++ {
-		rule := table.Rules[i]
+		rule := normalizeRule(table.Rules[i], i)
 		if rule.ID == "" || rule.When == "" {
 			return nil, core.NewFailure("META_RULE_INVALID", "meta rule requires id and when", map[string]any{"index": i}, false)
 		}
+		table.Rules[i] = rule
 	}
 	return &Engine{table: table, applied: map[string]core.DeltaDef{}}, nil
+}
+
+func normalizeRule(rule Rule, index int) Rule {
+	if rule.ID == "" {
+		rule.ID = "meta-rule-" + strconv.Itoa(index+1)
+	}
+	if rule.When == "" {
+		rule.When = rule.If
+	}
+	if len(rule.Patch) == 0 {
+		rule.Patch = map[string]any{}
+		if rule.Prune {
+			rule.Patch["prune"] = true
+		}
+		if rule.Reweight != 0 {
+			rule.Patch["reweight"] = rule.Reweight
+		}
+		if rule.Merge {
+			rule.Patch["merge"] = true
+		}
+	}
+	if rule.Reason == "" {
+		rule.Reason = rule.When
+	}
+	return rule
 }
 
 func (e *Engine) Health() core.HealthStatus {
@@ -109,6 +141,35 @@ func metaRuleMatches(when string, logs []core.StepLog, result core.Result) bool 
 		}
 		return false
 	default:
-		return false
+		return metricRuleMatches(when, result)
 	}
+}
+
+func metricRuleMatches(when string, result core.Result) bool {
+	for _, op := range []string{">=", "<=", ">", "<"} {
+		parts := strings.Split(when, op)
+		if len(parts) != 2 {
+			continue
+		}
+		left := strings.TrimSpace(parts[0])
+		right, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+		if err != nil {
+			return false
+		}
+		value, ok := result.Output[left].(float64)
+		if !ok {
+			return false
+		}
+		switch op {
+		case ">=":
+			return value >= right
+		case "<=":
+			return value <= right
+		case ">":
+			return value > right
+		case "<":
+			return value < right
+		}
+	}
+	return false
 }

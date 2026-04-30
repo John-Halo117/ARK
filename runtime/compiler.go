@@ -26,28 +26,30 @@ type DefinitionPaths struct {
 }
 
 type ActionMapping struct {
-	Name    string `json:"name"`
-	Adapter string `json:"adapter"`
+	Name    string         `json:"name" yaml:"name"`
+	Adapter string         `json:"adapter" yaml:"adapter"`
+	Payload map[string]any `json:"payload" yaml:"payload"`
 }
 
 type ActionTable struct {
-	Actions []ActionMapping `json:"actions"`
+	Actions []ActionMapping `json:"actions" yaml:"actions"`
 }
 
 type RouteCost struct {
-	Name string  `json:"name"`
-	Cost float64 `json:"cost"`
+	Name    string  `json:"name" yaml:"name"`
+	Cost    float64 `json:"cost" yaml:"cost"`
+	MaxCost float64 `json:"max_cost" yaml:"max_cost"`
 }
 
 type RoutingTable struct {
-	Routes []RouteCost `json:"routes"`
+	Routes []RouteCost `json:"routes" yaml:"routes"`
 }
 
 type Tables struct {
-	Policy policy.Table `json:"policy"`
-	Actions ActionTable  `json:"actions"`
-	Routing RoutingTable `json:"routing"`
-	Meta    meta.Table   `json:"meta"`
+	Policy  policy.Table `json:"policy" yaml:"policy"`
+	Actions ActionTable  `json:"actions" yaml:"actions"`
+	Routing RoutingTable `json:"routing" yaml:"routing"`
+	Meta    meta.Table   `json:"meta" yaml:"meta"`
 }
 
 type Runtime struct {
@@ -91,6 +93,8 @@ func Compile(paths DefinitionPaths) (Runtime, error) {
 	if err := readDefinition(paths.Meta, &metaTable); err != nil {
 		return Runtime{}, err
 	}
+	enrichPolicyParams(policyTable.Rules, actionTable)
+	enrichPolicyParams(policyTable.Policies, actionTable)
 
 	policyEngine, err := policy.NewEngine(policyTable)
 	if err != nil {
@@ -141,4 +145,65 @@ func readDefinition(path string, target any) error {
 		return core.NewFailure("DEFINITION_PARSE_FAILED", "definition file must be strict YAML", map[string]any{"path": path, "error": err.Error()}, false)
 	}
 	return nil
+}
+
+func (t *ActionTable) UnmarshalYAML(value *yaml.Node) error {
+	type actionTable ActionTable
+	var listed actionTable
+	if err := value.Decode(&listed); err == nil && len(listed.Actions) > 0 {
+		*t = ActionTable(listed)
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	actions := make([]ActionMapping, 0, len(value.Content)/2)
+	for i := 0; i+1 < len(value.Content) && len(actions) < action.MaxAdapters; i += 2 {
+		var mapping ActionMapping
+		if err := value.Content[i+1].Decode(&mapping); err != nil {
+			return err
+		}
+		mapping.Name = value.Content[i].Value
+		actions = append(actions, mapping)
+	}
+	t.Actions = actions
+	return nil
+}
+
+func (t *RoutingTable) UnmarshalYAML(value *yaml.Node) error {
+	type routingTable RoutingTable
+	var listed routingTable
+	if err := value.Decode(&listed); err == nil && len(listed.Routes) > 0 {
+		*t = RoutingTable(listed)
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	routes := make([]RouteCost, 0, len(value.Content)/2)
+	for i := 0; i+1 < len(value.Content) && len(routes) < MaxRoutingRows; i += 2 {
+		var route RouteCost
+		if err := value.Content[i+1].Decode(&route); err != nil {
+			return err
+		}
+		route.Name = value.Content[i].Value
+		route.Cost = route.MaxCost
+		routes = append(routes, route)
+	}
+	t.Routes = routes
+	return nil
+}
+
+func enrichPolicyParams(rules []policy.Rule, actionTable ActionTable) {
+	payloadByAction := make(map[string]map[string]any, len(actionTable.Actions))
+	for i := 0; i < len(actionTable.Actions) && i < action.MaxAdapters; i++ {
+		if len(actionTable.Actions[i].Payload) > 0 {
+			payloadByAction[actionTable.Actions[i].Name] = actionTable.Actions[i].Payload
+		}
+	}
+	for i := 0; i < len(rules) && i < policy.MaxRules; i++ {
+		if len(rules[i].Params) == 0 {
+			rules[i].Params = payloadByAction[rules[i].Action]
+		}
+	}
 }

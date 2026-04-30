@@ -1,3 +1,2 @@
-routes:
-  - name: record
-    cost: 0.1
+edge: {max_cost: 0.2}
+heavy: {max_cost: 1.0}

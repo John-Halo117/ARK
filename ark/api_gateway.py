@@ -36,6 +36,12 @@ from ark.runtime_contracts import runtime_contract_registry
 from ark.runtime_flow import RuntimeAudit
 from ark.subjects import call_subject
 from ark.time_utils import utc_now_iso, utc_timestamp
+from ark.web_console import (
+    CONSOLE_STATIC_DIR,
+    ConsoleFailure,
+    WebConsoleService,
+    failure,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,6 +74,7 @@ class ARKGateway:
         self.health.register("nats", lambda: self._nats.is_connected)
         self.health.register("db", lambda: self.db.conn is not None)
         self.health.register("gsb", lambda: self.gsb.health()["enabled"])
+        self.console = WebConsoleService(self.db, self.mesh_url)
         self._http_session: Optional[aiohttp.ClientSession] = None
         
         logger.info("ARK Gateway initialized")
@@ -258,6 +265,232 @@ class ARKGateway:
         except Exception:
             logger.exception("System status error")
             return web.json_response({"error": "status unavailable"}, status=500)
+
+    async def handle_console_index(self, request: web.Request) -> web.Response:
+        """GET /console - Local web console shell."""
+        index_path = CONSOLE_STATIC_DIR / "index.html"
+        if not index_path.is_file():
+            return web.json_response(
+                failure("CONSOLE_STATIC_MISSING", "console index is not available", {"path": str(index_path)}, True),
+                status=503,
+            )
+        return web.FileResponse(index_path)
+
+    async def handle_console_status(self, request: web.Request) -> web.Response:
+        """GET /api/console/status - Bounded health overview."""
+        blocked = self._record_gsb(request, "console.status", "console.status.query", {})
+        if blocked:
+            return blocked
+        try:
+            session = await self._get_session()
+            return web.json_response(await self.console.health_snapshot(session))
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console status error")
+            return web.json_response(
+                failure("CONSOLE_STATUS_FAILED", "console status query failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_events(self, request: web.Request) -> web.Response:
+        """GET /api/console/events - Bounded cursor event page."""
+        try:
+            source = request.rel_url.query.get("source")
+            event_type = request.rel_url.query.get("type")
+            limit = int(request.rel_url.query.get("limit", "50"))
+            cursor_raw = request.rel_url.query.get("cursor")
+            cursor = int(cursor_raw) if cursor_raw else None
+            blocked = self._record_gsb(
+                request,
+                "console.events",
+                "console.events.query",
+                {"source": source or "", "event_type": event_type or "", "limit": limit, "cursor": cursor or 0},
+            )
+            if blocked:
+                return blocked
+            return web.json_response(
+                self.console.event_page(source=source, event_type=event_type, limit=limit, cursor=cursor)
+            )
+        except (TypeError, ValueError):
+            return web.json_response(
+                failure("CONSOLE_EVENT_QUERY_INVALID", "limit and cursor must be integers", {}, False),
+                status=400,
+            )
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console event query error")
+            return web.json_response(
+                failure("CONSOLE_EVENTS_FAILED", "console event query failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_agents(self, request: web.Request) -> web.Response:
+        """GET /api/console/agents - Capability registry snapshot."""
+        blocked = self._record_gsb(request, "console.agents", "console.agents.query", {})
+        if blocked:
+            return blocked
+        try:
+            session = await self._get_session()
+            return web.json_response(await self.console.agent_registry(session))
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console agent registry error")
+            return web.json_response(
+                failure("CONSOLE_AGENTS_FAILED", "console agent registry query failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_trace(self, request: web.Request) -> web.Response:
+        """POST /api/console/trace - Deterministic decision trace preview."""
+        try:
+            body = await request.json()
+            blocked = self._record_gsb(request, "console.trace", "console.trace.preview", {})
+            if blocked:
+                return blocked
+            return web.json_response(self.console.decision_trace(body))
+        except json.JSONDecodeError:
+            return web.json_response(
+                failure("CONSOLE_JSON_INVALID", "request body must be valid json", {}, False),
+                status=400,
+            )
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console trace error")
+            return web.json_response(
+                failure("CONSOLE_TRACE_FAILED", "console decision trace failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_state(self, request: web.Request) -> web.Response:
+        """GET /state - Read-only S projection."""
+        blocked = self._record_gsb(request, "console.state", "console.state.read", {})
+        if blocked:
+            return blocked
+        try:
+            return web.json_response(self.console.state_snapshot())
+        except Exception:
+            logger.exception("Console state read error")
+            return web.json_response(
+                failure("CONSOLE_STATE_FAILED", "console state read failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_action(self, request: web.Request) -> web.Response:
+        """POST /action - Gate every action before queueing execution."""
+        try:
+            body = await request.json()
+            gated = self.console.action_gate(body, simulation=False)
+            blocked = self._record_gsb(
+                request,
+                "console.action",
+                str(gated["intent"]["action"]),
+                {"status": gated["status"], "event_hash": gated["event"]["hash"]},
+            )
+            if blocked:
+                return blocked
+            if gated["status"] == "BLOCKED":
+                return web.json_response(gated, status=403)
+            route = await self._fetch_route(str(gated["intent"]["action"]))
+            if route is None:
+                gated["status"] = "BLOCKED"
+                gated["decision"] = {
+                    **gated["decision"],
+                    "status": "BLOCKED",
+                    "decision": "block",
+                    "reasons": [*gated["decision"]["reasons"], "route_unavailable"],
+                    "executed": False,
+                }
+                gated["result"]["status"] = "BLOCKED"
+                gated["result"]["output"]["blocked"] = True
+                return web.json_response(gated, status=404)
+            service, instance_id = route.get("service"), route.get("instance_id")
+            if not service or not instance_id:
+                gated["status"] = "BLOCKED"
+                gated["decision"] = {
+                    **gated["decision"],
+                    "status": "BLOCKED",
+                    "decision": "block",
+                    "reasons": [*gated["decision"]["reasons"], "route_invalid"],
+                    "executed": False,
+                }
+                gated["result"]["status"] = "BLOCKED"
+                gated["result"]["output"]["blocked"] = True
+                return web.json_response(gated, status=404)
+            call_msg = self._build_call_msg(
+                None,
+                str(service),
+                str(instance_id),
+                str(gated["intent"]["action"]),
+                {"event": gated["event"], "proof": gated["proof"], "params": gated["intent"]["params"]},
+            )
+            await self._publish_call(call_msg)
+            gated["status"] = "QUEUED"
+            gated["decision"] = {**gated["decision"], "executed": True, "queued": True}
+            gated["result"]["status"] = "QUEUED"
+            gated["result"]["output"] = {**gated["result"]["output"], "executed": True, "queued": True, "request_id": call_msg["request_id"]}
+            return web.json_response(gated)
+        except json.JSONDecodeError:
+            return web.json_response(
+                failure("CONSOLE_JSON_INVALID", "request body must be valid json", {}, False),
+                status=400,
+            )
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console action error")
+            return web.json_response(
+                failure("CONSOLE_ACTION_FAILED", "console action failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_config_index(self, request: web.Request) -> web.Response:
+        """GET /api/console/config - Read-only config index."""
+        blocked = self._record_gsb(request, "console.config", "console.config.index", {})
+        if blocked:
+            return blocked
+        return web.json_response(self.console.config_index())
+
+    async def handle_console_config_file(self, request: web.Request) -> web.Response:
+        """GET /api/console/config/file?path=... - Read-only config content."""
+        blocked = self._record_gsb(request, "console.config_file", "console.config.read", {})
+        if blocked:
+            return blocked
+        try:
+            return web.json_response(self.console.config_file(request.rel_url.query.get("path", "")))
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console config read error")
+            return web.json_response(
+                failure("CONSOLE_CONFIG_FAILED", "console config read failed", {}, True),
+                status=500,
+            )
+
+    async def handle_console_test_ingest(self, request: web.Request) -> web.Response:
+        """POST /api/console/test-ingest - Safe bounded console test event."""
+        try:
+            body = await request.json()
+            blocked = self._record_gsb(request, "console.test_ingest", "console.test_ingest", {})
+            if blocked:
+                return blocked
+            return web.json_response(self.console.safe_test_ingest(body))
+        except json.JSONDecodeError:
+            return web.json_response(
+                failure("CONSOLE_JSON_INVALID", "request body must be valid json", {}, False),
+                status=400,
+            )
+        except ConsoleFailure as exc:
+            return web.json_response(exc.as_dict(), status=400)
+        except Exception:
+            logger.exception("Console test ingest error")
+            return web.json_response(
+                failure("CONSOLE_TEST_INGEST_FAILED", "console test ingest failed", {}, True),
+                status=500,
+            )
     
     def create_app(self) -> web.Application:
         """Create aiohttp application with security middleware"""
@@ -287,6 +520,22 @@ class ARKGateway:
         # System
         app.router.add_get('/api/status', self.handle_system_status)
         app.router.add_get('/api/health', self.handle_health)
+
+        # Local web console
+        app.router.add_get('/', self.handle_console_index)
+        app.router.add_get('/console', self.handle_console_index)
+        app.router.add_get('/api/console/status', self.handle_console_status)
+        app.router.add_get('/api/console/events', self.handle_console_events)
+        app.router.add_get('/api/console/agents', self.handle_console_agents)
+        app.router.add_post('/api/console/trace', self.handle_console_trace)
+        app.router.add_get('/api/console/state', self.handle_console_state)
+        app.router.add_get('/api/console/config', self.handle_console_config_index)
+        app.router.add_get('/api/console/config/file', self.handle_console_config_file)
+        app.router.add_post('/api/console/test-ingest', self.handle_console_test_ingest)
+        app.router.add_get('/state', self.handle_console_state)
+        app.router.add_post('/action', self.handle_console_action)
+        if CONSOLE_STATIC_DIR.is_dir():
+            app.router.add_static('/console/assets', CONSOLE_STATIC_DIR, show_index=False)
         
         return app
     

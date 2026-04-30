@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,17 +14,20 @@ const (
 )
 
 type Rule struct {
-	ID         string         `json:"id"`
-	When       string         `json:"when"`
-	Action     string         `json:"action"`
-	Params     map[string]any `json:"params"`
-	Confidence float64        `json:"confidence"`
-	EV         float64        `json:"ev"`
-	Cost       float64        `json:"cost"`
+	ID         string         `json:"id" yaml:"id"`
+	When       string         `json:"when" yaml:"when"`
+	Action     string         `json:"action" yaml:"action"`
+	Params     map[string]any `json:"params" yaml:"params"`
+	Confidence float64        `json:"confidence" yaml:"confidence"`
+	EV         float64        `json:"ev" yaml:"ev"`
+	Cost       float64        `json:"cost" yaml:"cost"`
+	Priority   float64        `json:"priority" yaml:"priority"`
 }
 
 type Table struct {
-	Rules []Rule `json:"rules"`
+	ID       string `json:"id" yaml:"id"`
+	Rules    []Rule `json:"rules" yaml:"rules"`
+	Policies []Rule `json:"policies" yaml:"policies"`
 }
 
 type Engine struct {
@@ -31,6 +35,7 @@ type Engine struct {
 }
 
 func NewEngine(table Table) (Engine, error) {
+	table = normalizeTable(table)
 	if len(table.Rules) > MaxRules {
 		return Engine{}, core.NewFailure("POLICY_TABLE_TOO_LARGE", "policy table exceeds bounded rule count", map[string]any{"max_rules": MaxRules}, false)
 	}
@@ -56,7 +61,7 @@ func (e Engine) Evaluate(resolved core.ResolvedEvent, trisca core.TRISCAOutput) 
 		if !matches(rule.When, resolved, trisca) {
 			continue
 		}
-		score := rule.Confidence*rule.EV - rule.Cost
+		score := scoreRule(rule)
 		if !matched || score > best.Score {
 			params := make(map[string]any, len(rule.Params))
 			for key, value := range rule.Params {
@@ -82,34 +87,90 @@ func (e Engine) Evaluate(resolved core.ResolvedEvent, trisca core.TRISCAOutput) 
 }
 
 func matches(when string, resolved core.ResolvedEvent, trisca core.TRISCAOutput) bool {
-	switch {
-	case when == "always":
-		return true
-	case strings.HasPrefix(when, "kind="):
-		return resolved.Event.Kind == strings.TrimPrefix(when, "kind=")
-	case strings.HasPrefix(when, "confidence>="):
-		threshold, ok := parseKnownThreshold(strings.TrimPrefix(when, "confidence>="))
-		return ok && trisca.Confidence >= threshold
-	case strings.HasPrefix(when, "s.entropy<="):
-		threshold, ok := parseKnownThreshold(strings.TrimPrefix(when, "s.entropy<="))
-		return ok && trisca.Vector.Entropy <= threshold
-	default:
-		return false
+	clauses := strings.Split(when, "&&")
+	for i := 0; i < len(clauses) && i < 8; i++ {
+		if !matchesClause(strings.TrimSpace(clauses[i]), resolved, trisca) {
+			return false
+		}
 	}
+	return len(clauses) > 0
 }
 
-func parseKnownThreshold(raw string) (float64, bool) {
-	switch raw {
-	case "0":
-		return 0, true
-	case "0.25":
-		return 0.25, true
-	case "0.5":
-		return 0.5, true
-	case "0.75":
-		return 0.75, true
-	case "1":
-		return 1, true
+func normalizeTable(table Table) Table {
+	if len(table.Rules) == 0 && len(table.Policies) > 0 {
+		table.Rules = table.Policies
+	}
+	return table
+}
+
+func scoreRule(rule Rule) float64 {
+	confidence := rule.Confidence
+	if confidence == 0 {
+		confidence = rule.Priority
+	}
+	if confidence == 0 {
+		confidence = 1
+	}
+	ev := rule.EV
+	if ev == 0 {
+		ev = 1
+	}
+	return confidence*ev - rule.Cost
+}
+
+func matchesClause(clause string, resolved core.ResolvedEvent, trisca core.TRISCAOutput) bool {
+	if clause == "always" {
+		return true
+	}
+	if strings.HasPrefix(clause, "kind=") {
+		return resolved.Event.Kind == strings.TrimSpace(strings.TrimPrefix(clause, "kind="))
+	}
+	for _, op := range []string{">=", "<=", ">", "<", "="} {
+		parts := strings.Split(clause, op)
+		if len(parts) != 2 {
+			continue
+		}
+		left := strings.TrimSpace(strings.TrimPrefix(parts[0], "s."))
+		right, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+		if err != nil {
+			return false
+		}
+		value, ok := metricValue(left, trisca)
+		if !ok {
+			return false
+		}
+		switch op {
+		case ">=":
+			return value >= right
+		case "<=":
+			return value <= right
+		case ">":
+			return value > right
+		case "<":
+			return value < right
+		case "=":
+			return value == right
+		}
+	}
+	return false
+}
+
+func metricValue(name string, trisca core.TRISCAOutput) (float64, bool) {
+	switch name {
+	case "confidence":
+		return trisca.Confidence, true
+	case "structure":
+		return trisca.Vector.Structure, true
+	case "entropy":
+		return trisca.Vector.Entropy, true
+	case "inequality":
+		return trisca.Vector.Inequality, true
+	case "temporal":
+		return trisca.Vector.Temporal, true
+	case "efficiency":
+		return trisca.Vector.Efficiency, true
+	case "signal_density":
+		return trisca.Vector.SignalDensity, true
 	default:
 		return 0, false
 	}
