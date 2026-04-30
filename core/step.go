@@ -55,13 +55,13 @@ type Event struct {
 }
 
 type Evidence struct {
-	Prior       float64 `json:"prior"`
+	Prior      float64 `json:"prior"`
 	Likelihood float64 `json:"likelihood"`
 }
 
 type ResolvedEvent struct {
 	Event      Event     `json:"event"`
-	Delta     Delta     `json:"delta"`
+	Delta      Delta     `json:"delta"`
 	ResolvedAt time.Time `json:"resolved_at"`
 }
 
@@ -81,8 +81,8 @@ type SVector struct {
 }
 
 type TRISCAOutput struct {
-	Vector     SVector `json:"s"`
-	Confidence float64 `json:"confidence"`
+	Vector     SVector  `json:"s"`
+	Confidence float64  `json:"confidence"`
 	Trace      []string `json:"trace"`
 }
 
@@ -117,8 +117,8 @@ type StepInput struct {
 }
 
 type StepOutput struct {
-	Status   string       `json:"status"`
-	EventID  string       `json:"event_id"`
+	Status   string        `json:"status"`
+	EventID  string        `json:"event_id"`
 	Resolved ResolvedEvent `json:"resolved"`
 	TRISCA   TRISCAOutput  `json:"trisca"`
 	Intent   Intent        `json:"intent"`
@@ -305,7 +305,7 @@ func (DefaultResolver) Resolve(event Event) (ResolvedEvent, error) {
 	}
 	return ResolvedEvent{
 		Event:      event,
-		Delta:     Delta{Kind: "event_delta", Values: values, LogOdds: logOdds},
+		Delta:      Delta{Kind: "event_delta", Values: values, LogOdds: logOdds},
 		ResolvedAt: event.OccurredAt.UTC(),
 	}, nil
 }

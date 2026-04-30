@@ -12,6 +12,7 @@
     "duckdb",
     "emitters",
     "enum",
+    "forge",
     "hashlib",
     "hmac",
     "html",
@@ -40,7 +41,8 @@
   "internal_roots": [
     "agents",
     "ark",
-    "emitters"
+    "emitters",
+    "forge"
   ],
   "third_party_roots": [
     "aiohttp",

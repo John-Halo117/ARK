@@ -155,7 +155,12 @@ def chunk(items: Sequence[Any], chunk_size: int) -> list[list[Any]]:
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     bounded = list(items[: MAX_CHUNKS * chunk_size])
-    return [bounded[index : index + chunk_size] for index in range(0, len(bounded), chunk_size)[:MAX_CHUNKS]]
+    chunks: list[list[Any]] = []
+    for index in range(0, len(bounded), chunk_size):
+        if len(chunks) >= MAX_CHUNKS:
+            break
+        chunks.append(bounded[index : index + chunk_size])
+    return chunks
 
 
 def reduce_recursive(items: Sequence[Any], reducer: Callable[[Any, Any], Any], *, depth: int = MAX_REDUCE_DEPTH) -> Any:
