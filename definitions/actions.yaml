@@ -1,0 +1,33 @@
+actions:
+  - name: record
+    adapter: memory
+  - name: reduce_load
+    adapter: memory
+    payload: {mode: throttle}
+  - name: increase_focus
+    adapter: memory
+    payload: {mode: focus}
+  - name: optimize_path
+    adapter: memory
+    payload: {mode: optimize}
+  - name: refresh_state
+    adapter: memory
+    payload: {mode: refresh}
+  - name: rebalance
+    adapter: memory
+    payload: {mode: rebalance}
+  - name: stabilize
+    adapter: memory
+    payload: {mode: stabilize}
+  - name: scale_up
+    adapter: memory
+    payload: {mode: scale}
+  - name: prune_noise
+    adapter: memory
+    payload: {mode: prune}
+  - name: redirect_resources
+    adapter: memory
+    payload: {mode: redirect}
+  - name: maintain
+    adapter: memory
+    payload: {mode: hold}

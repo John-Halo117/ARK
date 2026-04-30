@@ -1,8 +1,9 @@
-FROM rust:1.75-slim as builder
+FROM rust:1.84-slim AS builder
 
 WORKDIR /app
 
 COPY ark/Cargo.toml ark/Cargo.lock* .
+COPY ark/vendor ./vendor
 COPY ark/src ./src
 
 RUN cargo build --release
@@ -11,10 +12,13 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system ark \
+    && useradd --system --gid ark --home-dir /nonexistent --shell /usr/sbin/nologin ark
 
 COPY --from=builder /app/target/release/ark /usr/local/bin/ark
 
 ENV RUST_LOG=info
+USER ark
 
 CMD ["ark"]

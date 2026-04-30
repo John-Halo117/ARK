@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - local import/test environments
 
 from ark.config import load_composio_config, load_service_runtime_config
 from ark.event_schema import EventSource
+from ark.forge_planner import ForgePlanner
 from ark.gsb import GlobalStateBus, build_global_state_bus
 from ark.integrations import IntegrationRegistry, build_local_registry
 from ark.math_utils import zscore_anomaly
@@ -40,6 +41,10 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("AiderAgent")
+
+MAX_AGENT_HEARTBEATS = 100_000
+MAX_AGENT_MESSAGES = 1_000
+MAX_AGENT_SUBSCRIBE_IDLE_SECONDS = 30.0
 
 PROFILE_CAPABILITIES: Dict[str, List[str]] = {
     "opencode": [
@@ -95,6 +100,7 @@ class AiderAgent:
             default_tags={"service": self.service_name},
         )
         self.contracts = runtime_contract_registry()
+        self.planner = ForgePlanner()
 
         self._nats = ResilientNATSConnection(self.nats_url)
         self.shutdown = ShutdownCoordinator()
@@ -139,8 +145,8 @@ class AiderAgent:
             event["metadata"]["local_integrations"] = self.local_integrations.health() if self.local_integrations else []
         await self._publish_nats(self.nc, MESH_REGISTER, event, "agent.register")
 
-    async def heartbeat_loop(self):
-        while True:
+    async def heartbeat_loop(self, max_runs: int = MAX_AGENT_HEARTBEATS):
+        for _ in range(max(0, min(max_runs, MAX_AGENT_HEARTBEATS))):
             await asyncio.sleep(5)
             try:
                 await self._publish_nats(
@@ -159,10 +165,28 @@ class AiderAgent:
             except Exception as exc:
                 logger.error("Heartbeat error: %s", exc)
 
-    async def subscribe_calls(self):
+    async def subscribe_calls(
+        self,
+        max_messages: int = MAX_AGENT_MESSAGES,
+        idle_timeout_seconds: float = MAX_AGENT_SUBSCRIBE_IDLE_SECONDS,
+    ):
+        if max_messages <= 0:
+            raise ValueError("max_messages must be greater than zero")
+        if idle_timeout_seconds <= 0:
+            raise ValueError("idle_timeout_seconds must be greater than zero")
         try:
             sub = await self.nc.subscribe(call_subscribe_subject(self.service_name))
-            async for msg in sub.messages:
+            bounded_messages = max(0, min(max_messages, MAX_AGENT_MESSAGES))
+            bounded_idle = max(0.001, min(idle_timeout_seconds, MAX_AGENT_SUBSCRIBE_IDLE_SECONDS))
+            for _ in range(bounded_messages):
+                try:
+                    msg = await asyncio.wait_for(sub.messages.__anext__(), timeout=bounded_idle)
+                except asyncio.TimeoutError:
+                    logger.info("Subscription idle timeout after %.2fs", bounded_idle)
+                    return
+                except StopAsyncIteration:
+                    logger.info("Subscription stream closed")
+                    return
                 try:
                     capability = parse_capability_from_subject(msg.subject)
                     payload = self.contracts.materialize_payload(
@@ -176,6 +200,7 @@ class AiderAgent:
                     self.request_count += 1
                 except Exception as exc:
                     logger.error("Error processing call: %s", exc)
+            logger.info("Subscription message cap reached: %s", bounded_messages)
         except NATSError as exc:
             logger.error("Subscription error: %s", exc)
 
@@ -235,23 +260,28 @@ class AiderAgent:
 
     async def plan(self, params: Dict[str, Any]) -> Dict[str, Any]:
         goal = sanitize_string(params.get("goal", ""), 512)
+        plan = self.planner.plan(goal)
         return {
             "agent": self.service_name,
             "instance_id": self.instance_id,
             "capability": "reasoning.plan",
             "goal": goal,
-            "plan": {"steps": ["analyze", "design", "implement", "validate"]},
+            "plan": plan.as_dict(),
+            "planner_only": True,
             "timestamp": utc_now_iso(),
         }
 
     async def decompose(self, params: Dict[str, Any]) -> Dict[str, Any]:
         problem = sanitize_string(params.get("problem", ""), 512)
+        plan = self.planner.decompose(problem)
         return {
             "agent": self.service_name,
             "instance_id": self.instance_id,
             "capability": "reasoning.decompose",
             "problem": problem,
-            "subtasks": ["identify inputs", "process", "verify output"],
+            "subtasks": [step["id"] for step in plan.as_dict()["steps"]],
+            "plan": plan.as_dict(),
+            "planner_only": True,
             "timestamp": utc_now_iso(),
         }
 

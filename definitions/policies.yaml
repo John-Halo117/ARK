@@ -1,0 +1,60 @@
+id: axioms_v1
+rules:
+  - id: entropy-control
+    when: entropy > 0.7
+    action: reduce_load
+    priority: 0.8
+  - id: signal-amplification
+    when: signal_density > 0.75
+    action: increase_focus
+    priority: 0.7
+  - id: efficiency-recovery
+    when: efficiency < 0.4
+    action: optimize_path
+    priority: 0.75
+  - id: temporal-drift
+    when: temporal < 0.3
+    action: refresh_state
+    priority: 0.6
+  - id: inequality-spike
+    when: inequality > 0.65
+    action: rebalance
+    priority: 0.7
+  - id: structure-collapse
+    when: structure < 0.35
+    action: stabilize
+    priority: 0.85
+  - id: exploit-stable-efficient
+    when: entropy < 0.3 && efficiency > 0.7
+    action: scale_up
+    priority: 0.9
+  - id: prune-noise
+    when: entropy > 0.75 && signal_density < 0.4
+    action: prune_noise
+    priority: 0.8
+  - id: redirect-misuse
+    when: signal_density > 0.7 && efficiency < 0.5
+    action: redirect_resources
+    priority: 0.75
+  - id: maintain-balanced
+    when: entropy < 0.5 && efficiency > 0.6 && inequality < 0.5
+    action: maintain
+    priority: 0.5
+  - id: high-confidence-observe
+    when: confidence>=0.5
+    action: record
+    params:
+      mode: sd-ark
+      surface: policy
+    confidence: 0.9
+    ev: 1.0
+    cost: 0.1
+  - id: default-observe
+    when: always
+    action: record
+    params:
+      mode: sd-ark
+      surface: fallback
+    confidence: 0.5
+    ev: 0.5
+    cost: 0.05

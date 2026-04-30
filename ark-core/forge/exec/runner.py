@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
-import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 UNSAFE_COMMAND_MESSAGE = "command rejected by validation"
-_SAFE_CMD_RE = re.compile(r"^[a-zA-Z0-9_.=/:@-]+$")
 
 
 def project_python(tool_root: Path) -> str:
     """Prefer the project-local Python environment when present."""
 
     venv_python = tool_root / ".venv" / "bin" / "python"
-    return (
-        venv_python.as_posix()
-        if venv_python.exists()
-        else Path(sys.executable).as_posix()
-    )
+    return venv_python.as_posix() if venv_python.exists() else sys.executable
 
 
 def validated_command(command: list[str] | tuple[str, ...]) -> list[str]:
@@ -36,14 +31,24 @@ def _load_validate_docker_arg():
         from ark.security import validate_docker_arg
 
         return validate_docker_arg
-    except ModuleNotFoundError:
-        return _validate_command_arg
+    except (ModuleNotFoundError, ImportError):
+        security_path = Path(__file__).resolve().parents[3] / "ark" / "security.py"
+        try:
+            spec = importlib.util.spec_from_file_location("ark_security", security_path)
+            if spec is None or spec.loader is None:
+                raise ModuleNotFoundError(f"Cannot load {security_path}")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.validate_docker_arg
+        except (ModuleNotFoundError, ImportError):
+            return _reject_all_validator
 
 
-def _validate_command_arg(arg: str) -> str:
-    if not _SAFE_CMD_RE.match(arg):
-        raise ValueError(f"Unsafe command argument: {arg!r}")
-    return arg
+def _reject_all_validator(arg: str) -> str:
+    """Fail-closed fallback: reject every argument when ark.security cannot load."""
+    raise ValueError(
+        f"ark.security unavailable — refusing to run unvalidated argument: {arg!r}"
+    )
 
 
 def run_command(command: list[str], cwd: Path, timeout: int = 900) -> dict[str, object]:

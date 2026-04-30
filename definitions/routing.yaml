@@ -1,0 +1,7 @@
+routes:
+  - name: record
+    cost: 0.1
+  - name: edge
+    max_cost: 0.2
+  - name: heavy
+    max_cost: 1.0

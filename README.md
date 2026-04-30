@@ -72,6 +72,71 @@ ARK is a **self-scaling distributed compute organism** where:
 event pressure → mesh discovery → agent execution → state logging → feedback → autoscaling
 ```
 
+## SD-ARK Loop
+
+SD-ARK adds a deterministic Go spine for replayable, event-driven execution:
+
+```
+Event → Resolve(Δ) → TRISCA → S[6] → Policy → Intent → Action → Result → Meta(Δ_defs)
+```
+
+`S[6]` is the bounded TRISCA vector:
+
+```
+[structure, entropy, inequality, temporal, efficiency, signal_density]
+```
+
+### SD-ARK Module Map
+
+| Path | Role |
+| --- | --- |
+| `core/step.go` | Single Step loop, typed contracts, health signals, structured failures |
+| `core/trisca.go` | One deterministic TRISCA path producing `S[6]` |
+| `core/bayes.go` | Bounded log-odds update for evidence deltas |
+| `core/interpreter.go` | Wiring boundary from event ingress into Step |
+| `runtime/compiler.go` | Compiles bounded definition files into runtime tables |
+| `definitions/*.yaml` | JSON-compatible YAML policy, action, routing, and meta definitions |
+| `policy/policy.go` | Table-driven policy scoring with `confidence*EV-cost` |
+| `action/action.go` | Thin idempotent adapter execution boundary |
+| `meta/meta.go` | Bounded meta delta emission and safe local application |
+| `gsb/gsb.go` | Pub/sub interface with in-memory replayable implementation |
+| `api/server.go` | `/ingest`, `/gsb`, `/trisca`, `/policy`, `/action`, `/meta` handlers |
+| `ark/sd_trisca.py` | Python TRISCA mirror for planners and tool selection |
+| `ark/task_graph.py` | Bounded DAG TaskSpec, executor, scheduler, chunker, reducer, replay cache |
+| `ark/tool_system.py` | TRISCA-driven tool registry and selector with max 5 exposed tools |
+| `ark/skills.py` | Skill pipelines that produce DAG task specs instead of tool exposure |
+| `ark/mcp_containment.py` | Sandboxed MCP fallback boundary outside the core loop |
+| `ark/codegen_safe.py` | Safe-mode plugin spec generation and validation without shell execution |
+| `ark/forge_planner.py` | Forge planner facade; agents emit plans and do not execute DAGs |
+
+Runtime caps are explicit in each module health result. Tables, request bodies,
+logs, actions, messages, observations, and emitted meta deltas are bounded so the
+loop remains replayable under partial failure.
+
+### SD-ARK Execution Flow
+
+```
+Reality
+  -> /ingest
+  -> /gsb
+  -> /trisca
+  -> S[6]
+  -> ToolSelector
+  -> Skills / Forge planners
+  -> DAG Scheduler (max concurrency 10)
+  -> API tools
+  -> optional MCP fallback
+  -> /action
+  -> Result
+  -> /meta
+```
+
+MCP is contained as `tool.mcp.exec` and is fallback-only. Tool exposure is capped
+at five selected tools, selected deterministically from TRISCA vectors, cost, and
+success rate. Missing tools go through safe-mode codegen as static plugin specs:
+generate spec, validate, sandbox result, then register only after external
+validation.
+
 ---
 
 ## 🏗️ Architecture

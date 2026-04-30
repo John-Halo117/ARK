@@ -1,5 +1,14 @@
 FROM python:3.11-slim
 WORKDIR /app
-RUN pip install --no-cache-dir nats-py aiohttp docker
-COPY ark/autoscaler.py /app/autoscaler.py
-CMD ["python", "/app/autoscaler.py"]
+RUN pip install --no-cache-dir \
+    "aiohttp>=3.10.11,<4" \
+    nats-py==2.4.0
+COPY ark/ ./ark/
+COPY internal/contracts/ ./internal/contracts/
+COPY policy/ ./policy/
+ENV PYTHONUNBUFFERED=1 \
+    NATS_URL=nats://nats:4222
+EXPOSE 7001
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7001/api/health', timeout=2).read()" || exit 1
+CMD ["python", "-m", "ark.autoscaler"]
