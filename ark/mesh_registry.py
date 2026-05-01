@@ -228,10 +228,14 @@ class MeshRegistry:
         except NATSError as e:
             logger.error(f"Subscription error: {e}")
     
-    async def cleanup_expired(self):
+    async def cleanup_expired(self, interval_seconds: float = 5.0, max_cycles: int = 1_000_000):
         """Periodically remove expired instances"""
-        while True:
-            await asyncio.sleep(5)
+        bounded_cycles = max(1, min(int(max_cycles), 1_000_000))
+        bounded_interval = max(0.1, min(float(interval_seconds), 300.0))
+        for _ in range(bounded_cycles):
+            if self.shutdown.is_shutting_down:
+                break
+            await asyncio.sleep(bounded_interval)
             
             expired = []
             for service, instances in self.registry.items():

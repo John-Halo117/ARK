@@ -21,3 +21,5 @@ build
 !/.env.example
 coverage.xml
 htmlcov
+ark-ssot-mvp/infra/runtime
+ark-ssot-mvp/apps/runtime

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/John-Halo117/ARK/arkfield/internal/config"
 	"github.com/John-Halo117/ARK/arkfield/internal/stability"

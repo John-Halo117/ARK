@@ -24,6 +24,39 @@ type RuntimeConfig struct {
 	AuditLogPath      string
 }
 
+type Manifest struct {
+	Connectivity ManifestConnectivity `json:"connectivity"`
+	Budgets      ManifestBudgets      `json:"budgets"`
+	Services     ManifestServices     `json:"services"`
+	Contracts    []string             `json:"contracts"`
+	Promotion    ManifestPromotion    `json:"promotion"`
+}
+
+type ManifestConnectivity struct {
+	DefaultMode                   string   `json:"default_mode"`
+	AllowModes                    []string `json:"allow_modes"`
+	RequireExplicitExternalEnable bool     `json:"require_explicit_external_enable"`
+}
+
+type ManifestBudgets struct {
+	CPU            int `json:"cpu"`
+	MemoryMB       int `json:"memory_mb"`
+	QueueDepth     int `json:"queue_depth"`
+	RepairAttempts int `json:"repair_attempts"`
+	ExternalCalls  int `json:"external_calls"`
+}
+
+type ManifestServices struct {
+	Core     []string `json:"core"`
+	External []string `json:"external"`
+}
+
+type ManifestPromotion struct {
+	RequireTests       bool `json:"require_tests"`
+	RequirePolicy      bool `json:"require_policy"`
+	RequireReliability bool `json:"require_reliability"`
+}
+
 func LoadRuntimeConfig(defaultAddr string) RuntimeConfig {
 	return RuntimeConfig{
 		HTTPAddr:          envOr("HTTP_ADDR", defaultAddr),

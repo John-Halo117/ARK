@@ -3,7 +3,7 @@ DuckDB client for Python agents - query/write state, metrics, events
 Hardened: parameterized queries, input validation, size limits.
 """
 
-import duckdb
+import json
 import logging
 from typing import List, Dict, Any, Optional
 from ark.event_schema import ArkEvent, LKS
@@ -16,6 +16,10 @@ class DuckClient:
     """Interface to DuckDB for Python side"""
     
     def __init__(self, db_path: str = "/data/ark.duckdb"):
+        try:
+            import duckdb
+        except ImportError as exc:
+            raise RuntimeError("duckdb package is required for DuckClient") from exc
         self.conn = duckdb.connect(db_path)
         self._init_tables()
     
@@ -85,11 +89,11 @@ class DuckClient:
             event.event_type.value,
             event.source.value,
             event.timestamp,
-            event.payload,
-            lks_json,
+            json.dumps(event.payload, default=str),
+            json.dumps(lks_json, default=str) if lks_json is not None else None,
             event.decision,
-            event.delta,
-            event.tags
+            json.dumps(event.delta, default=str) if event.delta is not None else None,
+            json.dumps(event.tags or {}, default=str)
         ])
     
     def insert_lks(self, source: str, lks: LKS, timestamp: int):
@@ -116,7 +120,8 @@ class DuckClient:
             [source, safe_limit],
         ).fetchall()
         
-        return [dict(r) for r in result]
+        columns = ["source", "qts", "dsi", "dss", "phase", "timestamp", "created_at"]
+        return [_row_to_dict(columns, row) for row in result]
     
     def get_state(self, key: str) -> Optional[Dict[str, Any]]:
         """Get state value"""
@@ -124,7 +129,7 @@ class DuckClient:
             "SELECT value FROM state WHERE key = ?",
             [key]
         ).fetchone()
-        return result[0] if result else None
+        return _decode_json_value(result[0]) if result else None
     
     def set_state(self, key: str, value: Dict[str, Any]):
         """Set state value (upsert) — fixed ON CONFLICT syntax"""
@@ -132,7 +137,7 @@ class DuckClient:
         self.conn.execute("""
             INSERT INTO state (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
-        """, [key, value])
+        """, [key, json.dumps(value, default=str)])
     
     def query_events(self, source: Optional[str] = None, event_type: Optional[str] = None, 
                     limit: int = 100) -> List[Dict[str, Any]]:
@@ -151,8 +156,9 @@ class DuckClient:
         query += " ORDER BY timestamp DESC LIMIT ?"
         params.append(safe_limit)
         
-        result = self.conn.execute(query, params).fetchall()
-        return [dict(r) for r in result]
+        cursor = self.conn.execute(query, params)
+        columns = [column[0] for column in cursor.description]
+        return [_row_to_dict(columns, row) for row in cursor.fetchall()]
     
     def get_mesh_status(self) -> Dict[str, Any]:
         """Query system status"""
@@ -162,5 +168,28 @@ class DuckClient:
         return {
             "event_count": event_count,
             "lks_count": lks_count,
-            "db_path": self.conn.get_database_name()
+            "db_path": _database_name(self.conn)
         }
+
+
+def _row_to_dict(columns: list[str], row: Any) -> Dict[str, Any]:
+    return {column: _decode_json_value(value) for column, value in zip(columns, row)}
+
+
+def _decode_json_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped or stripped[0] not in "[{\"0123456789-tnf":
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return value
+
+
+def _database_name(conn: Any) -> str:
+    get_database_name = getattr(conn, "get_database_name", None)
+    if callable(get_database_name):
+        return str(get_database_name())
+    return "unknown"

@@ -23,3 +23,5 @@ build/
 venv/
 env/
 ENV/
+ark-ssot-mvp/infra/runtime/
+ark-ssot-mvp/apps/runtime/
