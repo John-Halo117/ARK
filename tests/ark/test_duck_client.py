@@ -3,6 +3,8 @@
 
 import pytest
 
+duckdb = pytest.importorskip("duckdb")
+
 from ark.event_schema import ArkEvent, EventSource, EventType, LKS
 from ark.duck_client import DuckClient
 
@@ -10,7 +12,6 @@ from ark.duck_client import DuckClient
 @pytest.fixture
 def db(tmp_path):
     """Create a temporary DuckDB for testing."""
-    import duckdb
     path = str(tmp_path / "test.duckdb")
     # Pre-create sequences that DuckClient._init_tables references
     conn = duckdb.connect(path)

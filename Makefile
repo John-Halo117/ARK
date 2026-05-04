@@ -1,12 +1,15 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: ci-once ci-loop smoke deploy-local install-hooks install-local-ci-service sync-online ai-enqueue ai-loop ai-assembly-line ai-apply ai-repair-last redteam classify self-audit
+.PHONY: ci-once ci-loop full-suite smoke deploy-local install-hooks install-local-ci-service sync-online ai-enqueue ai-loop ai-assembly-line ai-apply ai-repair-last redteam classify self-audit
 
 ci-once:
 	bash scripts/ci/run_once.sh "$$(git rev-parse HEAD)"
 
 ci-loop:
 	bash scripts/ci/watch_loop.sh
+
+full-suite:
+	bash scripts/ci/full_suite.sh
 
 smoke:
 	bash scripts/ci/smoke.sh

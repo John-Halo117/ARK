@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if [[ "${ARK_SKIP_FULL_SUITE:-}" == "1" ]]; then
+  echo "[ARK-FullSuite] skipped by ARK_SKIP_FULL_SUITE=1"
+  exit 0
+fi
+
+bash scripts/ci/full_suite.sh
