@@ -27,21 +27,22 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 cat <<EOF
-Forge for Linux/Arch is installed.
+Forge is installed.
 
 What this did:
 - linked forge-app into $BIN_DIR
 - installed a Forge desktop entry into $APPS_DIR
 - installed the Forge icon into $ICON_DIR
 
-How to open Forge:
-- app launcher: Forge
-- terminal: forge-app
-- repo local: ./forge --desktop
+Commands:
+  forge-app            open Forge
+  forge-app --status   show app status
+  forge-app --stop     stop the browser app
+  forge-app --cleanup  remove stale launcher state
 
 No systemd service was created.
 Forge starts only when you open it.
-Use the Shutdown button inside Forge when you are done with the browser app.
+Use the Forge Shutdown button or: forge-app --stop
 
 If your shell does not already include $BIN_DIR, add this:
   export PATH="$BIN_DIR:\$PATH"

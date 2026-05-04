@@ -342,7 +342,7 @@ def launch(
             self._render_panels()
             if not self._seed_logs:
                 self._log("Type a task and press Run. Use : for the command palette.")
-            if self.machine_state.get("status") == "RUNTIME MISSING":
+            if self.machine_state.get("stage_label") == "warming ai":
                 self._log(_runtime_doctor_message(self.runtime_summary))
             self.query_one("#task-input", Input).focus()
 
@@ -475,10 +475,8 @@ def launch(
                 self.call_from_thread(self._set_stage, "RUNNING", f"iter {attempts}")
                 client, runtime_summary = _build_client_from_request(request)
                 self.call_from_thread(self._set_runtime_summary, runtime_summary)
-                if client is None:
-                    self.call_from_thread(
-                        self._set_stage, "RUNTIME MISSING", "runtime unavailable"
-                    )
+                if client is None or not getattr(client, "enabled", True):
+                    self.call_from_thread(self._set_stage, "WAITING", "runtime warming")
                     self.call_from_thread(
                         self._log, _runtime_doctor_message(runtime_summary)
                     )
@@ -514,7 +512,9 @@ def launch(
                 except (
                     Exception
                 ) as exc:  # pragma: no cover - safety net for interactive mode
-                    self.call_from_thread(self._set_stage, "BLOCKED", "run failed")
+                    self.call_from_thread(
+                        self._set_stage, "WAITING", "run needs review"
+                    )
                     self.call_from_thread(
                         self._log,
                         f"Run failed; moved to manual review ({type(exc).__name__}).",
@@ -623,8 +623,9 @@ def launch(
             self.machine_state["runtime_model"] = status.model
             self.machine_state["runtime_models"] = list(status.models)
             if not status.ready:
-                self.machine_state["status"] = "RUNTIME MISSING"
-            elif self.machine_state.get("status") == "RUNTIME MISSING":
+                self.machine_state["status"] = "WAITING"
+                self.machine_state["stage_label"] = "warming ai"
+            elif self.machine_state.get("stage_label") == "warming ai":
                 self.machine_state["status"] = "WAITING"
                 self.machine_state["stage_label"] = "idle"
             self._log(status.summary)
@@ -835,7 +836,8 @@ def launch(
         def _set_runtime_summary(self, runtime_summary: str) -> None:
             self.runtime_summary = runtime_summary
             if "not detected" in runtime_summary.lower():
-                self.machine_state["status"] = "RUNTIME MISSING"
+                self.machine_state["status"] = "WAITING"
+                self.machine_state["stage_label"] = "warming ai"
             self._render_panels()
 
         def _log(self, message: str) -> None:
