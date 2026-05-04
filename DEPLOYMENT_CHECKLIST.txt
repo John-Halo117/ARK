@@ -1,0 +1,176 @@
+/**
+ * PRODUCTION DOCKER COMPOSE STACK - CRITICAL CHECKLIST
+ * 
+ * Complete ALL items before docker compose up -d
+ */
+
+PRE-DEPLOYMENT CHECKLIST
+═════════════════════════════════════════════════════════════════
+
+[ ] DNS & NETWORKING
+  [ ] Add A record for music.example.com → server IP
+  [ ] Verify DNS resolves: nslookup music.example.com
+  [ ] Ports 80/443 are open on host firewall
+  [ ] Port 8080 open (Traefik dashboard, localhost only)
+
+[ ] ENVIRONMENT CONFIGURATION (.env)
+  [ ] Set DOMAIN (e.g., music.example.com)
+  [ ] Set LETSENCRYPT_EMAIL (for cert expiration notices)
+  [ ] Set REDIS_PASSWORD (openssl rand -base64 32)
+  [ ] Set AUTHELIA_TOTP_SECRET (openssl rand -base64 32)
+  [ ] Set MUSIC_PATH (/srv/navidrome/music or custom)
+  [ ] Set DATA_PATH (/srv/navidrome/data or custom)
+  [ ] LETSENCRYPT_ENV=production (after testing)
+  [ ] chmod 600 .env
+
+[ ] DIRECTORY SETUP
+  [ ] mkdir -p /srv/traefik/logs
+  [ ] mkdir -p /srv/navidrome/{music,data,logs}
+  [ ] mkdir -p /srv/authelia/{data,logs}
+  [ ] mkdir -p /srv/redis/{data,logs}
+  [ ] mkdir -p /srv/home-assistant/{config,logs}
+  [ ] mkdir -p /srv/traefik && touch /srv/traefik/acme.json
+  [ ] chmod 600 /srv/traefik/acme.json
+
+[ ] MUSIC LIBRARY
+  [ ] Copy music files to /srv/navidrome/music
+  [ ] Verify readable: ls -l /srv/navidrome/music | head
+  [ ] At least 1 file present (for testing)
+
+[ ] AUTHELIA CONFIGURATION
+  [ ] authelia/configuration.yml domain set (example.com)
+  [ ] authelia/configuration.yml session.redis.password matches .env
+  [ ] authelia/users_database.yml has valid password hashes
+  [ ] Generate hashes:
+      docker run --rm authelia/authelia:4.38.5 authelia hash-password
+  [ ] Update admin password in users_database.yml
+  [ ] Update user emails in users_database.yml
+  [ ] chmod 600 authelia/users_database.yml
+
+[ ] TRAEFIK CONFIGURATION
+  [ ] traefik/traefik.yml email set (admin@example.com)
+  [ ] traefik/dynamic.yml domain references updated
+  [ ] TLS certificate resolver = letsencrypt
+  [ ] ACME email configured for expiration notices
+
+[ ] DOCKER COMPOSE VALIDATION
+  [ ] docker-compose config (validates syntax)
+  [ ] All service images pinned (no :latest)
+  [ ] All volumes defined (no orphaned mounts)
+  [ ] All networks defined (proxy network exists)
+  [ ] All secrets marked CHANGE_ME are updated
+
+[ ] SECURITY AUDIT
+  [ ] No default credentials in any config
+  [ ] Redis password is strong (32+ bytes)
+  [ ] TOTP secret is random (32+ bytes)
+  [ ] File permissions: 600 on /srv/traefik/acme.json
+  [ ] File permissions: 600 on authelia/users_database.yml
+  [ ] File permissions: 600 on .env
+  [ ] Authelia access_control rules reviewed
+  [ ] HTTPS enforcement enabled (HTTP → HTTPS redirect)
+  [ ] Security headers configured in Traefik
+
+[ ] MONITORING & LOGGING
+  [ ] Log paths exist: /srv/{traefik,authelia,redis,navidrome}/logs
+  [ ] Logging drivers configured (json-file with rotation)
+  [ ] Traefik dashboard accessible (local auth required)
+
+[ ] FINAL VALIDATION
+  [ ] Run: bash ./preflight-checks.sh
+  [ ] All checks pass (0 failures)
+  [ ] Review environment variables: grep CHANGE_ME .env (should be empty)
+  [ ] Review config domains: grep "example.com" authelia/configuration.yml
+
+═════════════════════════════════════════════════════════════════
+
+DEPLOYMENT
+═════════════════════════════════════════════════════════════════
+
+1. Start stack (with logs):
+   docker compose up -d && docker compose logs -f
+
+2. Wait for services to be healthy:
+   docker compose ps
+   (All services should show "Up" in ~30-60 seconds)
+
+3. Verify Traefik certificates:
+   docker compose logs traefik | grep -i "certificate"
+
+4. Test services:
+   curl -v https://music.example.com
+   (Should redirect to Authelia login if not authenticated)
+
+5. First login:
+   Username: admin
+   Password: (from authelia/users_database.yml)
+   Enable TOTP (2FA) for security
+
+═════════════════════════════════════════════════════════════════
+
+FAIL-SAFE: COMMON ISSUES & FIXES
+═════════════════════════════════════════════════════════════════
+
+ISSUE: "acme.json: permission denied"
+FIX: sudo chmod 600 /srv/traefik/acme.json
+     sudo chown 65534:65534 /srv/traefik/acme.json
+
+ISSUE: Let's Encrypt "too many failed authorizations"
+FIX: Set LETSENCRYPT_ENV=staging in .env
+     Delete /srv/traefik/acme.json
+     docker compose restart traefik
+     Test with staging certs first
+
+ISSUE: Traefik can't find Docker socket
+FIX: Verify docker-compose.yml mounts: /var/run/docker.sock:/var/run/docker.sock:ro
+     Check daemon running: docker ps
+
+ISSUE: Authelia "connection refused" to Redis
+FIX: Verify redis service is running: docker compose ps redis
+     Check Redis password matches .env: grep REDIS_PASSWORD .env
+
+ISSUE: Navidrome "Permission denied" on /music
+FIX: Mount is read-only (:ro); verify music files are readable
+     ls -l /srv/navidrome/music/
+
+ISSUE: "Port 80 already in use"
+FIX: Check for other services: sudo lsof -i :80
+     Kill/stop conflicting service, restart stack
+
+ISSUE: "DNS does not resolve"
+FIX: Add A record to DNS provider
+     Wait 5-10 minutes for propagation
+     Test: nslookup music.example.com
+
+ISSUE: Home Assistant can't reach Docker daemon
+FIX: Home Assistant on host network (network_mode: host)
+     Alternatively, use separate bridge network if discovery not needed
+
+═════════════════════════════════════════════════════════════════
+
+MAINTENANCE
+═════════════════════════════════════════════════════════════════
+
+Update image versions:
+  docker compose pull
+  docker compose up -d
+
+View logs:
+  docker compose logs -f traefik
+  docker compose logs -f authelia
+  docker compose logs -f navidrome
+
+Restart service:
+  docker compose restart navidrome
+
+Backup data:
+  tar -czf backup-navidrome-$(date +%Y%m%d).tar.gz /srv/navidrome/data
+  tar -czf backup-authelia-$(date +%Y%m%d).tar.gz /srv/authelia/data
+
+Stop all:
+  docker compose down
+
+Stop all and remove volumes (DESTRUCTIVE):
+  docker compose down -v
+
+═════════════════════════════════════════════════════════════════

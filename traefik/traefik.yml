@@ -1,0 +1,107 @@
+# Traefik v3 static configuration
+# CRITICAL: This file is read-only mounted in container
+# All .env variables referenced here are NOT expanded (Traefik doesn't support it)
+# Instead, use environment variables in docker-compose.yml to pass to container
+# Changes require container restart: docker compose restart traefik
+
+global:
+  # Enable Docker provider (auto-discover containers)
+  sendAnonymousUsage: false
+
+# Entrypoints (ports and protocols)
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          # Redirect all HTTP traffic to HTTPS
+          scheme: https
+          permanent: true
+  
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+        # Default cert (for SNI mismatches)
+        options: default
+      middlewares:
+        - securityHeaders@file
+
+  # Traefik dashboard (internal, localhost only)
+  traefik:
+    address: ":8080"
+
+# Certificate resolvers (Let's Encrypt)
+# HARDCODED: Production endpoint (change to staging in docker-compose.yml if needed)
+certificateResolvers:
+  letsencrypt:
+    acme:
+      # Production endpoint (for Let's Encrypt real certificates)
+      # To use staging (test), override with environment variable in compose
+      server: https://acme-v02.api.letsencrypt.org/directory
+      
+      # Email for expiration notifications
+      # HARDCODED: Change in .env and pass via docker-compose.yml
+      # Currently: admin@example.com (must be updated)
+      email: admin@example.com
+      
+      # Storage file (must exist, mode 600)
+      storage: /acme.json
+      
+      # HTTP-01 challenge (no DNS API required)
+      httpChallenge:
+        entryPoint: web
+      
+      # Optional: DNS-01 challenge (if using CloudFlare/Route53/etc.)
+      # Uncomment and configure provider below
+      # dnsChallenge:
+      #   provider: cloudflare
+      #   delayBeforeCheck: 10
+      #   resolvers:
+      #     - 1.1.1.1:53
+
+# Providers: Docker + File
+providers:
+  # Docker container discovery (labels-based routing)
+  docker:
+    endpoint: unix:///var/run/docker.sock
+    exposedByDefault: false
+    # Only containers with traefik.enable=true are exposed
+    defaultRule: "Host(`{{ index .Labels \"traefik.http.routers.{{ .Name }}.rule\" }}`)"
+    network: proxy  # Use specific network (not default bridge)
+  
+  # File provider (dynamic config: middleware, TLS options)
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true  # Reload on file change (no restart needed)
+
+# API & Dashboard
+api:
+  dashboard: true
+  debug: false
+  # insecure: true  # ONLY for local testing; NEVER in production
+
+# Logging
+# Level can be overridden via environment variable (not expanded here; use docker-compose.yml)
+log:
+  level: info
+  filePath: /var/log/traefik/traefik.log
+  format: json
+
+# Access logs (HTTP request logs)
+accessLog:
+  filePath: /var/log/traefik/access.log
+  format: json
+  bufferingSize: 100
+  fields:
+    names:
+      StartUTC: drop  # Remove redundant timestamp
+    defaultMode: keep
+
+# Metrics (optional; for monitoring)
+# metrics:
+#   prometheus:
+#     addEntryPointsLabels: true
+#     addServicesLabels: true

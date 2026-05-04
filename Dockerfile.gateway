@@ -1,22 +1,39 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system ark \
+    && useradd --system --gid ark --home-dir /nonexistent --shell /usr/sbin/nologin ark
+
+FROM base AS builder
+
+RUN pip install --no-cache-dir --user --no-warn-script-location \
     "aiohttp>=3.10.11,<4" \
     nats-py==2.4.0 \
     "duckdb>=0.10,<1" \
     "aiofiles>=23.2.0,<25"
 
-COPY ark/ ./ark/
-COPY internal/contracts/ ./internal/contracts/
-COPY policy/ ./policy/
+FROM base
+
+COPY --from=builder /root/.local /home/ark/.local
+
+COPY --chown=ark:ark ark/ ./ark/
+COPY --chown=ark:ark internal/contracts/ ./internal/contracts/
+COPY --chown=ark:ark policy/ ./policy/
 
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PATH=/home/ark/.local/bin:$PATH \
     NATS_URL=nats://nats:4222 \
     MESH_URL=http://mesh-registry:7000
 
+USER ark
+
 EXPOSE 8080
+
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=2).read()" || exit 1
 

@@ -1,0 +1,99 @@
+# Traefik v3 dynamic configuration (middleware, TLS options)
+# File provider: watch enabled (reloads on change without container restart)
+# NOTE: Domain references hardcoded; update when .env DOMAIN changes
+
+http:
+  middlewares:
+    # Security headers
+    securityHeaders:
+      headers:
+        accessControlAllowOriginList:
+          - "https://music.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
+          - "https://auth.example.com"   # CHANGE_ME: Update to match DOMAIN in .env
+          - "https://traefik.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
+        accessControlAllowCredentials: true
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlMaxAge: 100
+        addVaryHeader: true
+        # HSTS (HTTP Strict Transport Security)
+        stsSeconds: 63072000  # 2 years
+        stsIncludeSubdomains: true
+        stsPreload: true
+        # XSS protection
+        contentTypeNosniff: true
+        # Clickjacking protection
+        framedeny: true
+        # Referrer policy
+        referrerPolicy: "strict-origin-when-cross-origin"
+        # Content Security Policy
+        contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+    
+    # Authelia forward authentication
+    # Used by: navidrome, traefik dashboard
+    authelia:
+      forwardauth:
+        # WIRED: Authelia service endpoint (via docker network "proxy")
+        address: http://authelia:9091/api/authz/forward-auth
+        trustForwardHeader: true
+        # User info headers passed from Authelia → backend
+        authRequestHeaders:
+          - Remote-User
+          - Remote-Groups
+          - Remote-Name
+          - Remote-Email
+        # Authelia redirects unauthenticated users here
+        authResponseHeaders:
+          - Authorization
+    
+    # Rate limiting (optional; protects against brute force)
+    rateLimitAuth:
+      rateLimit:
+        average: 10
+        period: 60s
+        burst: 20
+    
+    # Compression
+    compression:
+      compress: true
+    
+    # CORS (if needed for API clients)
+    cors:
+      allowedOrigins:
+        - https://music.example.com  # CHANGE_ME: Update to match DOMAIN in .env
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowedHeaders:
+        - Authorization
+        - Content-Type
+      exposedHeaders:
+        - X-Custom-Response-Header
+      allowCredentials: true
+      maxAge: 100
+
+# TLS/HTTPS options
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        # Modern browsers + TLS 1.2+ clients
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      curvePreferences:
+        - CurveP521
+        - CurveP384
+        - CurveP256
+      sniStrict: false  # Allow SNI mismatches to default cert

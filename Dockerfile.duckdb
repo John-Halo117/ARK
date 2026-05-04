@@ -1,10 +1,30 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir duckdb
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system ark \
+    && useradd --system --gid ark --home-dir /nonexistent --shell /usr/sbin/nologin ark
+
+FROM base AS builder
+
+RUN pip install --no-cache-dir --user --no-warn-script-location \
+    duckdb
+
+FROM base
+
+COPY --from=builder /root/.local /home/ark/.local
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PATH=/home/ark/.local/bin:$PATH
+
+USER ark
 
 VOLUME ["/data"]
+
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD python -c "import duckdb; conn = duckdb.connect('/data/ark.duckdb'); conn.execute('SELECT 1').fetchone(); conn.close()" || exit 1
 

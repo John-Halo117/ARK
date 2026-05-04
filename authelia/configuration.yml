@@ -1,0 +1,228 @@
+# Authelia v4 configuration
+# CRITICAL: Changes require container restart: docker compose restart authelia
+# Session store: Redis (configured below via environment)
+# WIRED: All domain references use TOP_LEVEL_DOMAIN from .env
+
+###############################################################################
+# Server Configuration
+###############################################################################
+server:
+  host: 0.0.0.0
+  port: 9091
+  path: ""
+  read_buffer_size: 4096
+  write_buffer_size: 4096
+  enable_pprof: false
+  enable_expvars: false
+
+###############################################################################
+# Logging
+###############################################################################
+log:
+  level: info
+  format: json
+  file_path: /var/log/authelia/authelia.log
+  keep_stdout: false
+
+###############################################################################
+# TOTP (Time-based One-Time Password / Two-Factor Auth)
+###############################################################################
+totp:
+  disable: false
+  issuer: Authelia
+  algorithm: sha1
+  digits: 6
+  period: 30
+  skew: 1
+  # Secret key (from .env AUTHELIA_TOTP_SECRET)
+  # WIRED: Value comes from environment variable in docker-compose.yml
+  secret: "${AUTHELIA_TOTP_SECRET}"
+
+###############################################################################
+# WebAuthn / FIDO2 (optional hardware security keys)
+###############################################################################
+webauthn:
+  disable: true
+  # If enabled:
+  # display_name: Authelia
+  # attestation_conveyance_preference: indirect
+  # user_verification: preferred
+  # timeout: 60000
+
+###############################################################################
+# Duo Push (optional SMS/push notifications)
+###############################################################################
+duo_api:
+  disable: true
+  # If enabled:
+  # hostname: api-xxxxxxxx.duosecurity.com
+  # integration_key: CHANGE_ME
+  # secret_key: CHANGE_ME
+
+###############################################################################
+# Session Storage (Redis)
+###############################################################################
+session:
+  name: authelia_session
+  # WIRED: Domain from TOP_LEVEL_DOMAIN in .env
+  # Must match root domain for cookie to be sent to subdomains
+  # Example: TOP_LEVEL_DOMAIN=example.com → session cookie sent to music.example.com, auth.example.com, etc.
+  domain: "example.com"  # CHANGE_ME: Update to match TOP_LEVEL_DOMAIN in .env
+  expiration: 3600  # 1 hour
+  inactivity: 300   # 5 minutes (logout if idle)
+  remember_me_duration: 30d
+  
+  # Session data stored in Redis
+  provider: redis
+  redis:
+    # WIRED: Redis service name (Docker network DNS resolves "redis" → container IP)
+    host: redis
+    port: 6379
+    # WIRED: Redis password from environment variable (passed via docker-compose.yml)
+    password: "${REDIS_PASSWORD}"
+    database_index: 0
+    maximum_active_connections: 10
+    minimum_idle_connections: 5
+    tls:
+      enabled: false
+      # skip_verify: false
+      # certificate_chain: /certs/redis.crt
+      # private_key: /certs/redis.key
+
+###############################################################################
+# Regulation (brute-force protection)
+###############################################################################
+regulation:
+  max_retries: 3           # Max failed logins before lockout
+  find_time: 2m            # Time window (2 minutes)
+  ban_time: 5m             # Lockout duration (5 minutes)
+
+###############################################################################
+# Storage (user database, TOTP secrets, etc.)
+###############################################################################
+storage:
+  # Local file-based user database
+  local:
+    path: /config/users_database.yml
+
+###############################################################################
+# Authentication Methods
+###############################################################################
+authentication_backend:
+  password_reset:
+    # Custom: change to your email provider
+    disable: true
+    # If enabled:
+    # custom:
+    #   enabled: true
+
+  refresh_interval: 5m
+  
+  # File-based users (users_database.yml)
+  file:
+    path: /config/users_database.yml
+    watch: true  # Reload on file change (no restart needed)
+    search:
+      email: true
+
+###############################################################################
+# Access Control (authorization rules)
+###############################################################################
+access_control:
+  # Default policy (deny all unless explicitly allowed)
+  default_policy: deny
+  
+  rules:
+    # Allow anonymous access to /health (for healthchecks)
+    - domain: "auth.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
+      path: "/api/health"
+      policy: bypass
+      methods:
+        - GET
+    
+    # Forward auth endpoint (called by Traefik)
+    # Must bypass auth (called during auth process)
+    - domain: "auth.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
+      path: "/api/authz/forward-auth"
+      policy: bypass
+      methods:
+        - GET
+        - POST
+    
+    # Allow authenticated users to access Navidrome
+    - domain: "music.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
+      policy: one_factor
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+    
+    # Allow authenticated users to access Traefik dashboard
+    - domain: "traefik.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
+      policy: one_factor
+      methods:
+        - GET
+        - POST
+    
+    # Allow authenticated users to access Home Assistant (if using Traefik)
+    - domain: "ha.example.com"  # CHANGE_ME: Update if using Traefik for HA
+      policy: one_factor
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - WebSocket
+
+###############################################################################
+# Session Cookies
+###############################################################################
+cookies:
+  # Secure by default (HTTPS only)
+  secure: true
+  httponly: true
+  samesite: Lax
+  # WIRED: Domain from TOP_LEVEL_DOMAIN in .env
+  # Must match session.domain above
+  domain: "example.com"  # CHANGE_ME: Update to match TOP_LEVEL_DOMAIN in .env
+  # subdomain_override: auth
+
+###############################################################################
+# Notifier (optional: email, Slack, webhook notifications)
+###############################################################################
+notifier:
+  disable: true
+  # If enabled, configure one of:
+  
+  # SMTP (email notifications)
+  # smtp:
+  #   host: smtp.gmail.com
+  #   port: 587
+  #   username: your-email@gmail.com
+  #   password: CHANGE_ME_APP_PASSWORD
+  #   sender: Authelia <your-email@gmail.com>
+  #   subject: "[Authelia] {title}"
+  #   startup_check_address: test@authelia.com
+  #   disable_require_tls: false
+  #   tls:
+  #     skip_verify: false
+  
+  # Slack webhook
+  # slack:
+  #   webhook_url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+  
+  # Generic webhook
+  # webhook:
+  #   url: https://example.com/webhook
+  #   method: POST
+
+###############################################################################
+# Identity Providers (optional: OAuth2/OpenID Connect)
+###############################################################################
+identity_providers:
+  oidc:
+    enabled: false
+    # If enabled: configure clients, scopes, endpoints
+    # See: https://www.authelia.com/configuration/identity-providers/openid-connect/

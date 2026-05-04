@@ -1,0 +1,296 @@
+name: ark-prod
+
+x-defaults: &defaults
+  restart: unless-stopped
+  networks:
+    - ark-net
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-python-env: &python-env
+  PYTHONUNBUFFERED: "1"
+  NATS_URL: nats://nats:4222
+  ARK_GSB_ENABLED: "${ARK_GSB_ENABLED:-1}"
+
+x-go-env: &go-env
+  HTTP_READ_HEADER_TIMEOUT: "${HTTP_READ_HEADER_TIMEOUT:-5s}"
+  G_MAX: "${G_MAX:-0.8}"
+  SIGMA_K: "${SIGMA_K:-2.2}"
+  HYSTERESIS_LAMBDA: "${HYSTERESIS_LAMBDA:-0.08}"
+  BACKPRESSURE_EPS: "${BACKPRESSURE_EPS:-0.1}"
+  TIME_DECAY_RATE: "${TIME_DECAY_RATE:-0.2}"
+
+services:
+  nats:
+    <<: *defaults
+    image: nats:2.11-alpine
+    container_name: ark-nats
+    command:
+      - "-js"
+      - "-sd"
+      - "/data"
+      - "-m"
+      - "8222"
+      - "--max_payload=33554432"
+      - "--max_connections=65536"
+      - "--max_subscriptions=1000000"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    environment:
+      NATS_ENABLE_JETSTREAM: "true"
+      NATS_LOG_DIR: "/data/logs"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+
+  redis:
+    <<: *defaults
+    image: redis:7-alpine
+    container_name: ark-redis
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "1gb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  duckdb:
+    <<: *defaults
+    image: ${ARK_REGISTRY:-ghcr.io}/${ARK_IMAGE_PREFIX:-john-halo117/ark}/duckdb:${ARK_VERSION:-v1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.duckdb
+    container_name: ark-duckdb
+    volumes:
+      - duckdb_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  mesh-registry:
+    <<: *defaults
+    image: ${ARK_REGISTRY:-ghcr.io}/${ARK_IMAGE_PREFIX:-john-halo117/ark}/mesh:${ARK_VERSION:-v1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.mesh
+    container_name: ark-mesh
+    environment:
+      <<: *python-env
+    ports:
+      - "7000:7000"
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7000/api/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  autoscaler:
+    <<: *defaults
+    image: ${ARK_REGISTRY:-ghcr.io}/${ARK_IMAGE_PREFIX:-john-halo117/ark}/autoscaler:${ARK_VERSION:-v1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.autoscaler
+    container_name: ark-autoscaler
+    environment:
+      <<: *python-env
+      ARK_AUTOSCALER_MIN_INSTANCES: "${ARK_AUTOSCALER_MIN_INSTANCES:-1}"
+      ARK_AUTOSCALER_MAX_INSTANCES: "${ARK_AUTOSCALER_MAX_INSTANCES:-10}"
+      ARK_AUTOSCALER_SCALE_UP_THRESHOLD: "${ARK_AUTOSCALER_SCALE_UP_THRESHOLD:-0.7}"
+      ARK_AUTOSCALER_SCALE_DOWN_THRESHOLD: "${ARK_AUTOSCALER_SCALE_DOWN_THRESHOLD:-0.2}"
+    ports:
+      - "7001:7001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+      mesh-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7001/api/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  gateway:
+    <<: *defaults
+    image: ${ARK_REGISTRY:-ghcr.io}/${ARK_IMAGE_PREFIX:-john-halo117/ark}/gateway:${ARK_VERSION:-v1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: ark-gateway
+    environment:
+      <<: *python-env
+      MESH_URL: http://mesh-registry:7000
+      ARK_RATE_LIMIT_REQUESTS: "${ARK_RATE_LIMIT_REQUESTS:-100}"
+      ARK_RATE_LIMIT_WINDOW: "${ARK_RATE_LIMIT_WINDOW:-60}"
+    ports:
+      - "8080:8080"
+    volumes:
+      - duckdb_data:/data:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+      duckdb:
+        condition: service_healthy
+      mesh-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  stability-kernel:
+    <<: *defaults
+    image: ${ARK_REGISTRY:-ghcr.io}/${ARK_IMAGE_PREFIX:-john-halo117/ark}/stability-kernel:${ARK_VERSION:-v1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.stability-kernel
+    container_name: ark-stability-kernel
+    environment:
+      <<: *go-env
+      HTTP_ADDR: ":8081"
+      STABILITY_ALPHA_MAX: "${STABILITY_ALPHA_MAX:-0.3}"
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  ingestion-leader:
+    <<: *defaults
+    image: ${ARK_REGISTRY:-ghcr.io}/${ARK_IMAGE_PREFIX:-john-halo117/ark}/ingestion-leader:${ARK_VERSION:-v1.0}
+    build:
+      context: .
+      dockerfile: Dockerfile.ingestion-leader
+    container_name: ark-ingestion-leader
+    environment:
+      <<: *go-env
+      HTTP_ADDR: ":8080"
+      NATS_URL: nats://nats:4222
+      REDIS_ADDR: redis:6379
+      STABILITY_KERNEL_URL: http://stability-kernel:8081
+      CAS_ROOT: /cas
+    ports:
+      - "8083:8080"
+    volumes:
+      - type: bind
+        source: "${ARK_CAS_ROOT:-./data/cas}"
+        target: /cas
+    depends_on:
+      nats:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      stability-kernel:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+networks:
+  ark-net:
+    name: ark-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  nats_data:
+    driver: local
+  redis_data:
+    driver: local
+  duckdb_data:
+    driver: local

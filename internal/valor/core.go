@@ -17,17 +17,8 @@ const (
 	DefaultRejectScoreMax = 0.33
 )
 
-type Band struct {
-	Name        string  `json:"name"`
-	MinScore    float64 `json:"min_score"`
-	MaxScore    float64 `json:"max_score"`
-	MaxShare    float64 `json:"max_share"`
-	Action      string  `json:"action"`
-	Description string  `json:"description"`
-}
-
 type Config struct {
-	Bands          []Band
+	Bands          []shared.Band
 	MaxInputs      int
 	RuntimeCap     time.Duration
 	MemoryCapMiB   int
@@ -89,7 +80,7 @@ func (v VALORCore) Run(ctx context.Context, scores []shared.Score) (shared.Outpu
 	return shared.Output{Status: "ok", Metrics: metrics, Actions: actions}, nil
 }
 
-func assignBands(scores []shared.Score, bands []Band, maxInputs int) []int {
+func assignBands(scores []shared.Score, bands []shared.Band, maxInputs int) []int {
 	out := make([]int, 0, len(scores))
 	for index := 0; index < len(scores) && index < maxInputs; index++ {
 		out = append(out, findBand(scores[index].Score, bands))
@@ -97,7 +88,7 @@ func assignBands(scores []shared.Score, bands []Band, maxInputs int) []int {
 	return out
 }
 
-func findBand(score float64, bands []Band) int {
+func findBand(score float64, bands []shared.Band) int {
 	for index := 0; index < len(bands) && index < shared.MaxMetricBandCount; index++ {
 		if score >= bands[index].MinScore && score < bands[index].MaxScore {
 			return index
@@ -106,7 +97,7 @@ func findBand(score float64, bands []Band) int {
 	return len(bands) - 1
 }
 
-func computeMetrics(scores []shared.Score, bandIndexes []int, bands []Band, maxInputs int) shared.Metrics {
+func computeMetrics(scores []shared.Score, bandIndexes []int, bands []shared.Band, maxInputs int) shared.Metrics {
 	total := totalInfluence(scores, maxInputs)
 	distribution := make(map[string]float64, len(bands))
 	for index := 0; index < len(bands) && index < shared.MaxMetricBandCount; index++ {
@@ -291,8 +282,8 @@ func normalizeConfig(cfg Config) Config {
 	return cfg
 }
 
-func defaultBands() []Band {
-	return []Band{
+func defaultBands() []shared.Band {
+	return []shared.Band{
 		{Name: "reject", MinScore: math.Inf(-1), MaxScore: DefaultRejectScoreMax, MaxShare: 1, Action: "reject", Description: "below governance floor"},
 		{Name: "defer", MinScore: DefaultRejectScoreMax, MaxScore: DefaultSelectScoreMin, MaxShare: 0.50, Action: "defer", Description: "requires review"},
 		{Name: "select", MinScore: DefaultSelectScoreMin, MaxScore: math.Inf(1), MaxShare: 0.70, Action: "select", Description: "meets governance floor"},
@@ -323,7 +314,7 @@ func validateConfig(cfg Config) error {
 	return nil
 }
 
-func validateBand(band Band, index int) error {
+func validateBand(band shared.Band, index int) error {
 	if band.Name == "" {
 		return shared.NewFailure("VALOR_BAND_NAME_REQUIRED", "band name is required", map[string]any{"index": index}, false)
 	}

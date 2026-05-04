@@ -1,0 +1,223 @@
+#!/bin/bash
+##############################################################################
+# WIRING VERIFICATION - Step-by-step wiring checklist
+# Run this AFTER: updating .env, running wiring-setup.sh
+##############################################################################
+
+cat << 'EOF'
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        WIRING VERIFICATION CHECKLIST                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+STEP 1: UPDATE .env WITH ACTUAL VALUES
+─────────────────────────────────────────────────────────────────────────────
+
+Verify in .env:
+
+  DOMAIN=music.example.com                          → UPDATE TO YOUR DOMAIN
+  TOP_LEVEL_DOMAIN=example.com                      → UPDATE TO PARENT DOMAIN
+  LETSENCRYPT_EMAIL=admin@example.com               → UPDATE TO YOUR EMAIL
+  REDIS_PASSWORD=CHANGE_ME_REDIS_PASSWORD...       → RUN: openssl rand -base64 32
+  AUTHELIA_TOTP_SECRET=CHANGE_ME_TOTP_SECRET...    → RUN: openssl rand -base64 32
+  MUSIC_PATH=/srv/navidrome/music                  → VERIFY PATH EXISTS
+  DATA_PATH=/srv/navidrome/data                    → VERIFY PATH EXISTS
+
+Check:
+  [ ] No CHANGE_ME values in .env
+  [ ] DOMAIN is DNS-resolvable (run: nslookup music.example.com)
+  [ ] TOP_LEVEL_DOMAIN is parent of DOMAIN
+
+
+STEP 2: RUN WIRING-SETUP.SH (Auto-wire configs)
+─────────────────────────────────────────────────────────────────────────────
+
+This script updates hardcoded domain references in config files:
+
+  traefik/traefik.yml              → Updates: email
+  traefik/dynamic.yml              → Updates: domain references in CORS, security headers
+  authelia/configuration.yml       → Updates: session.domain, access_control rules
+
+Run:
+  bash ./wiring-setup.sh
+
+Expected output:
+  [WIRE 1] traefik/traefik.yml     ✓ Updated email
+  [WIRE 2] traefik/dynamic.yml     ✓ Updated domains
+  [WIRE 3] authelia/configuration.yml ✓ Updated domains
+
+Check:
+  [ ] All three WIRE steps show ✓
+  [ ] No errors reported
+
+
+STEP 3: RUN WIRING-CHECK.SH (Validate wiring)
+─────────────────────────────────────────────────────────────────────────────
+
+This script validates that .env variables are correctly wired to configs:
+
+Run:
+  bash ./wiring-check.sh
+
+Expected output:
+  [CHECK 1] DOMAIN & TOP_LEVEL_DOMAIN           ✓ DOMAIN
+  [CHECK 2] REDIS_PASSWORD wiring               ✓ REDIS_PASSWORD set
+  [CHECK 3] AUTHELIA_TOTP_SECRET wiring         ✓ AUTHELIA_TOTP_SECRET set
+  [CHECK 4] MUSIC_PATH & DATA_PATH wiring       ✓ MUSIC_PATH
+  [CHECK 5] traefik/traefik.yml wiring          ✓ traefik.yml email not hardcoded
+  [CHECK 6] traefik/dynamic.yml wiring          ✓ traefik/dynamic.yml domains checked
+  [CHECK 7] authelia/configuration.yml wiring   ✓ authelia.yml domains checked
+  [CHECK 8] docker-compose.yml variable expansion ✓ docker-compose uses variables
+
+Check:
+  [ ] All 8 checks pass (✓)
+  [ ] No warnings or failures
+
+
+STEP 4: VERIFY CONFIG FILES (Manual check)
+─────────────────────────────────────────────────────────────────────────────
+
+After running wiring-setup.sh, manually verify:
+
+traefik/traefik.yml:
+  email: YOUR_ACTUAL_EMAIL@example.com (NOT admin@example.com)
+
+traefik/dynamic.yml:
+  accessControlAllowOriginList should contain: YOUR_ACTUAL_DOMAIN
+  cors.allowedOrigins should contain: YOUR_ACTUAL_DOMAIN
+
+authelia/configuration.yml:
+  session.domain: YOUR_ACTUAL_TOP_LEVEL_DOMAIN (e.g., example.com)
+  cookies.domain: YOUR_ACTUAL_TOP_LEVEL_DOMAIN
+  access_control rules should reference YOUR_ACTUAL_DOMAIN
+
+Check commands:
+  grep "email:" traefik/traefik.yml
+  grep "allowedOrigins" traefik/dynamic.yml
+  grep "domain:" authelia/configuration.yml
+
+
+STEP 5: RUN PREFLIGHT-CHECKS.SH (Validate environment)
+─────────────────────────────────────────────────────────────────────────────
+
+This script validates system setup (ports, directories, permissions):
+
+Run:
+  bash ./preflight-checks.sh
+
+Expected output:
+  [CHECK 1] Docker daemon running                 ✓ PASS
+  [CHECK 2] docker-compose installed              ✓ PASS
+  [CHECK 3] .env file exists                      ✓ PASS
+  [CHECK 4] CHANGE_ME values in .env              ✓ PASS (no placeholders)
+  [CHECK 5] DNS resolution for DOMAIN             ✓ PASS
+  [CHECK 6] Port 80 available                     ✓ PASS
+  [CHECK 7] Port 443 available                    ✓ PASS
+  ... (more checks)
+
+Check:
+  [ ] All checks pass (0 failures)
+
+
+STEP 6: MANUAL WIRING AUDIT (if needed)
+─────────────────────────────────────────────────────────────────────────────
+
+If wiring-setup.sh didn't update a config file, manually edit:
+
+traefik/traefik.yml:
+  Find: email: admin@example.com
+  Replace: email: YOUR_EMAIL
+
+traefik/dynamic.yml:
+  Find: accessControlAllowOriginList: ["https://music.example.com", "https://auth.example.com"]
+  Replace: ["https://YOUR_DOMAIN", "https://auth.YOUR_TOPLEVEL", "https://traefik.YOUR_TOPLEVEL"]
+
+authelia/configuration.yml:
+  Find: domain: "example.com"
+  Replace: domain: "YOUR_TOPLEVEL_DOMAIN"
+  
+  Find: access_control rules with:
+    domain: "auth.example.com"
+    domain: "music.example.com"
+    domain: "traefik.example.com"
+  Replace: with YOUR_ACTUAL_DOMAINS
+
+
+STEP 7: DEPLOY STACK
+─────────────────────────────────────────────────────────────────────────────
+
+After all wiring complete and validated:
+
+  docker compose up -d
+
+Monitor logs:
+  docker compose logs -f traefik authelia
+
+Verify services healthy:
+  docker compose ps
+  (All should show "Up" and "healthy")
+
+
+WIRING DIAGRAM
+─────────────────────────────────────────────────────────────────────────────
+
+.env variables flow:
+  .env
+    ├─ DOMAIN → docker-compose.yml (labels) → Traefik routing
+    │         → authelia/configuration.yml (access_control)
+    │
+    ├─ TOP_LEVEL_DOMAIN → authelia/configuration.yml (session.domain, cookies.domain)
+    │
+    ├─ LETSENCRYPT_EMAIL → traefik/traefik.yml (acme email)
+    │
+    ├─ REDIS_PASSWORD → docker-compose.yml (redis command)
+    │                 → docker-compose.yml (authelia environment)
+    │                 → authelia/configuration.yml (redis password)
+    │
+    ├─ AUTHELIA_TOTP_SECRET → docker-compose.yml (authelia environment)
+    │                        → authelia/configuration.yml (totp.secret)
+    │
+    ├─ MUSIC_PATH → docker-compose.yml (navidrome volumes)
+    │
+    └─ DATA_PATH → docker-compose.yml (navidrome volumes)
+
+COMMON WIRING ISSUES
+─────────────────────────────────────────────────────────────────────────────
+
+Issue: "Authelia can't connect to Redis"
+  Cause: REDIS_PASSWORD mismatch
+  Check: echo $REDIS_PASSWORD in .env
+         grep "password:" authelia/configuration.yml
+         grep REDIS_PASSWORD docker-compose.yml
+  Fix: Run wiring-setup.sh again or manually update
+
+Issue: "Domain doesn't resolve in Traefik"
+  Cause: DOMAIN not updated in docker-compose.yml labels
+  Check: grep "DOMAIN=" docker-compose.yml (should use ${DOMAIN})
+  Fix: docker-compose.yml labels already use ${DOMAIN}; just ensure .env is loaded
+
+Issue: "Authelia redirects to wrong domain"
+  Cause: TOP_LEVEL_DOMAIN mismatch
+  Check: grep "domain:" authelia/configuration.yml (should match TOP_LEVEL_DOMAIN)
+  Fix: Run wiring-setup.sh or manually update authelia/configuration.yml
+
+Issue: "Let's Encrypt certificate fails"
+  Cause: LETSENCRYPT_EMAIL not updated
+  Check: grep "email:" traefik/traefik.yml
+  Fix: Run wiring-setup.sh or manually update traefik/traefik.yml
+
+
+SUMMARY CHECKLIST
+─────────────────────────────────────────────────────────────────────────────
+
+[ ] 1. Updated .env with actual values (no CHANGE_ME, no defaults)
+[ ] 2. Ran wiring-setup.sh (auto-wired config files)
+[ ] 3. Ran wiring-check.sh (validated all checks pass)
+[ ] 4. Manually verified config files (domains, emails match .env)
+[ ] 5. Ran preflight-checks.sh (environment validated)
+[ ] 6. Domains created A records and DNS resolves
+[ ] 7. Directories created with correct permissions
+[ ] 8. acme.json created with mode 600
+[ ] 9. Ready for: docker compose up -d
+
+EOF

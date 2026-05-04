@@ -1,0 +1,429 @@
+#!/usr/bin/env bash
+##############################################################################
+# PRODUCTION DEPLOYMENT GUIDE & CHECKLIST
+# Complete step-by-step instructions
+##############################################################################
+
+cat << 'EOF'
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    PRODUCTION DEPLOYMENT GUIDE                              ║
+║                     Traefik + Authelia + Navidrome                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+OVERVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+This is a production-grade Docker Compose stack with:
+  ✓ Traefik v3 (reverse proxy, TLS, routing)
+  ✓ Authelia (SSO authentication, 2FA)
+  ✓ Navidrome (music streaming server)
+  ✓ Home Assistant (event ingestion, automation)
+  ✓ Redis (session store)
+
+All traffic encrypted, authenticated, and properly routed through Traefik.
+Auto-generated configs, full validation, production-ready.
+
+
+PREREQUISITES
+════════════════════════════════════════════════════════════════════════════════
+
+System Requirements:
+  - Ubuntu 20.04 LTS or newer (or equivalent Linux)
+  - 2+ CPU cores, 4GB+ RAM
+  - 50GB+ free disk space (for music library + Navidrome cache)
+  - Docker Engine 20.10+ with docker-compose 2.0+
+  - Port 80/443 open on firewall (required for Let's Encrypt)
+  - Static IP or dynamic DNS (domain must resolve to server)
+
+Domain Requirements:
+  - Registered domain (e.g., example.com)
+  - Access to DNS settings
+  - A record pointing to server IP
+  - Optional: TLS certificate pre-purchased (will auto-generate with Let's Encrypt)
+
+Software:
+  - curl/wget
+  - bash 4.0+
+  - openssl (for password generation)
+
+
+STEP-BY-STEP DEPLOYMENT
+════════════════════════════════════════════════════════════════════════════════
+
+STEP 1: CLONE & SETUP REPOSITORY
+─────────────────────────────────────────────────────────────────────────────
+
+  # Create deployment directory
+  mkdir -p ~/music-stack && cd ~/music-stack
+
+  # Clone or copy all files to ~/music-stack/
+  # Files needed:
+  #   docker-compose.yml
+  #   .env.prod
+  #   init-prod.sh
+  #   deploy-prod.sh
+  #   monitor-prod.sh
+  #   backup-prod.sh
+  #   traefik/ (directory)
+  #   authelia/ (directory)
+
+  # Verify all files present
+  ls -la
+
+STEP 2: CONFIGURE ENVIRONMENT (.env)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Copy production template
+  cp .env.prod .env
+
+  # Edit with your values
+  nano .env
+
+  Required values to update:
+    DOMAIN=music.example.com              (your domain; must be registered)
+    TOP_LEVEL_DOMAIN=example.com          (parent domain for cookies)
+    LETSENCRYPT_EMAIL=admin@example.com   (your email; cert expiry notices)
+    MUSIC_PATH=/srv/navidrome/music       (music library location)
+    DATA_PATH=/srv/navidrome/data         (persistent data directory)
+    REDIS_PASSWORD=                       (generate: openssl rand -base64 32)
+    AUTHELIA_TOTP_SECRET=                 (generate: openssl rand -base64 32)
+
+  Generate random passwords:
+    openssl rand -base64 32
+    # Run twice, copy-paste into .env
+
+  Save and exit (Ctrl+O, Enter, Ctrl+X in nano)
+
+STEP 3: SETUP DNS
+─────────────────────────────────────────────────────────────────────────────
+
+  # Get your server's public IP
+  curl -s https://ifconfig.me
+
+  # Add DNS A record to your domain registrar (e.g., GoDaddy, Namecheap, Route53)
+  # Domain: music.example.com
+  # Record: A
+  # Value: YOUR_SERVER_IP
+
+  # Verify DNS resolves (wait 5-10 minutes for propagation)
+  nslookup music.example.com
+  # Should return your server IP
+
+STEP 4: VERIFY FIREWALL (Critical!)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Open ports 80 and 443 (required for Let's Encrypt and HTTPS)
+  
+  If using iptables:
+    sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+    sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+  If using ufw (Ubuntu):
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+    sudo ufw reload
+
+  If using AWS Security Groups / Digital Ocean Firewall:
+    - Add Inbound rule: HTTP (80) from 0.0.0.0/0
+    - Add Inbound rule: HTTPS (443) from 0.0.0.0/0
+
+  Verify ports open:
+    curl http://localhost:80
+    curl https://localhost:443
+
+STEP 5: INITIALIZE STACK (Auto-generates all configs)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Run initialization script (creates directories, generates configs, validates)
+  bash init-prod.sh
+
+  Expected output:
+    ✓ Docker daemon running
+    ✓ Directories created
+    ✓ acme.json created (mode 600)
+    ✓ traefik/traefik.yml generated
+    ✓ traefik/dynamic.yml generated
+    ✓ authelia/configuration.yml generated
+    ✓ DNS resolves
+    ✓ All checks pass
+
+  If errors, fix and re-run: bash init-prod.sh
+
+STEP 6: DEPLOY STACK (Staging first!)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Deploy to STAGING first (uses Let's Encrypt staging certs; no rate limits)
+  bash deploy-prod.sh staging
+
+  Expected output:
+    ✓ Initialization complete
+    ✓ Services started
+    ✓ All services running
+    ✓ Endpoints responding
+    ✓ Certificates found
+
+  Monitor in another terminal:
+    docker-compose logs -f
+
+  Access Traefik dashboard:
+    https://traefik.example.com/dashboard/
+    (Username: admin, Password: authelia)
+
+  Check service status:
+    docker-compose ps
+    (All should show "Up (healthy)")
+
+STEP 7: CHANGE DEFAULT PASSWORD (CRITICAL!)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Generate password hash
+  docker run --rm authelia/authelia:4.38.5 authelia hash-password
+
+  # When prompted, enter your new password
+  # Copy the hash (starts with $2a$ or $pbkdf2)
+
+  # Edit users database
+  nano authelia/users_database.yml
+
+  # Replace default hash with your new hash:
+  # password: "$2a$12$..." → password: "YOUR_NEW_HASH"
+  
+  # Restart Authelia
+  docker-compose restart authelia
+
+  # Test login
+  curl -v https://music.example.com
+  (Should redirect to auth page)
+
+STEP 8: DEPLOY TO PRODUCTION (Real certs)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Once satisfied with staging, deploy to production
+  bash deploy-prod.sh production
+
+  Expected output:
+    ✓ Using Let's Encrypt PRODUCTION
+    ✓ Services started
+    ✓ Real certificates obtained
+    ✓ HTTPS working
+
+  IMPORTANT: You have 50 certs/domain/week limit. Only deploy to production
+  once you're confident everything is working.
+
+STEP 9: SETUP MUSIC LIBRARY
+─────────────────────────────────────────────────────────────────────────────
+
+  # Copy music files to library directory
+  cp ~/Music/*.mp3 /srv/navidrome/music/
+  # or
+  rsync -av ~/Music/ /srv/navidrome/music/
+
+  # Supported formats: MP3, FLAC, M4A, OGG, WMA, APE, OPUS
+
+  # Navidrome auto-scans every 3600 seconds (1 hour)
+  # Or trigger manual scan via web UI
+
+STEP 10: ENABLE 2FA (Recommended)
+─────────────────────────────────────────────────────────────────────────────
+
+  # Access Authelia user panel
+  https://music.example.com
+
+  # Login with admin credentials
+
+  # Click "Settings" → "Two-Factor Authentication" → "TOTP"
+
+  # Scan QR code with authenticator app:
+    - Google Authenticator
+    - Authy
+    - Microsoft Authenticator
+    - 1Password
+    - Bitwarden
+
+  # Enable "Remember this device for 30 days" (optional)
+
+STEP 11: SETUP AUTOMATED BACKUPS
+─────────────────────────────────────────────────────────────────────────────
+
+  # Daily backup at 2 AM
+  (crontab -l 2>/dev/null; echo "0 2 * * * cd ~/music-stack && bash backup-prod.sh") | crontab -
+
+  # Verify crontab set
+  crontab -l
+
+  # Manual backup
+  bash backup-prod.sh
+
+  # Verify backup created
+  ls -lah /srv/backups/
+
+
+PRODUCTION CHECKLIST
+════════════════════════════════════════════════════════════════════════════════
+
+Before going live, verify:
+
+  [ ] .env configured with YOUR values (not defaults)
+  [ ] DNS A record created and resolves
+  [ ] Firewall ports 80/443 open
+  [ ] init-prod.sh completed successfully
+  [ ] docker-compose ps shows all services "Up"
+  [ ] HTTPS working: https://music.example.com
+  [ ] Authentication working: login required
+  [ ] Default admin password changed
+  [ ] 2FA (TOTP) enabled
+  [ ] Music library populated
+  [ ] Backups configured and tested
+  [ ] Monitoring script running
+  [ ] Logs reviewed: docker-compose logs
+  [ ] No errors in /srv/*/logs/ directories
+
+
+ACCESSING SERVICES
+════════════════════════════════════════════════════════════════════════════════
+
+After deployment, services available at:
+
+  Navidrome (Music Server):
+    https://music.example.com
+    Username: admin
+    Password: (your chosen password)
+
+  Traefik Dashboard:
+    https://traefik.example.com/dashboard/
+    (Same auth as above)
+
+  Home Assistant (if using):
+    http://YOUR_SERVER_IP:8123
+    (Not behind Traefik; use firewall rules for security)
+
+  Authelia (SSO):
+    https://auth.example.com
+    (Usually auto-redirected from music.example.com)
+
+
+COMMON ISSUES & FIXES
+════════════════════════════════════════════════════════════════════════════════
+
+Issue: "Connection refused" on HTTPS
+  Cause: Firewall ports not open
+  Fix: Verify ports 80/443 open (netstat -tln | grep -E ':80|:443')
+
+Issue: "Too many failed authorizations" from Let's Encrypt
+  Cause: Using production certs before ready
+  Fix: Delete /srv/traefik/acme.json, restart with staging
+
+Issue: Authelia "connection refused"
+  Cause: Redis not running or password wrong
+  Fix: docker-compose logs redis
+       Verify REDIS_PASSWORD in .env matches docker-compose.yml
+
+Issue: Navidrome can't read music library
+  Cause: File permissions
+  Fix: chmod -R 755 /srv/navidrome/music
+       chown -R 1000:1000 /srv/navidrome/data
+
+Issue: "502 Bad Gateway" from Traefik
+  Cause: Backend service not responding
+  Fix: docker-compose ps (check all services up)
+       docker-compose logs traefik (check routing)
+
+Issue: Certificates not auto-renewing
+  Cause: Port 80 blocked or DNS issues
+  Fix: Verify ports open
+       Check /srv/traefik/logs/traefik.log for errors
+
+
+MONITORING & MAINTENANCE
+════════════════════════════════════════════════════════════════════════════════
+
+Daily Monitoring:
+  # One-time health check
+  bash monitor-prod.sh
+
+  # Continuous monitoring
+  bash monitor-prod.sh monitor
+  # (Press Ctrl+C to stop)
+
+View Logs:
+  # All services
+  docker-compose logs -f
+
+  # Specific service
+  docker-compose logs -f navidrome
+
+  # Last 100 lines
+  docker-compose logs --tail 100 traefik
+
+Update Images:
+  docker-compose pull
+  docker-compose up -d
+
+Restart Services:
+  docker-compose restart navidrome
+  docker-compose restart authelia
+  docker-compose restart traefik
+
+View Disk Usage:
+  docker system df
+
+Cleanup (remove old images):
+  docker system prune
+
+
+DISASTER RECOVERY
+════════════════════════════════════════════════════════════════════════════════
+
+If everything breaks:
+
+  1. Stop containers:
+     docker-compose down
+
+  2. Check disk space:
+     df -h /srv
+
+  3. View logs:
+     cat /srv/traefik/logs/traefik.log
+     cat /srv/authelia/logs/authelia.log
+     cat /srv/navidrome/logs/navidrome.log
+
+  4. Restart:
+     docker-compose up -d
+
+  5. Wait 30 seconds for health checks
+     docker-compose ps
+
+  6. Monitor logs:
+     docker-compose logs -f
+
+
+PRODUCTION NOTES
+════════════════════════════════════════════════════════════════════════════════
+
+Security:
+  - Never expose services without Authelia
+  - Always use HTTPS (port 443)
+  - Change default passwords immediately
+  - Enable 2FA for all users
+  - Run backups daily
+
+Performance:
+  - Redis memory limit: 256MB (configurable in docker-compose.yml)
+  - Navidrome CPU: ~1 core at peak
+  - Traefik CPU: <0.5 core
+  - Expected RAM: ~1GB total
+
+Scaling:
+  - For 100k+ songs: increase Navidrome memory & CPU
+  - For high user count: increase Authelia replicas (run multiple containers)
+  - For redundancy: use external Redis + multiple Traefik instances (requires Swarm/K8s)
+
+Support:
+  - Traefik: https://doc.traefik.io/traefik/
+  - Authelia: https://www.authelia.com/
+  - Navidrome: https://www.navidrome.org/
+  - Docker: https://docs.docker.com/
+
+
+EOF

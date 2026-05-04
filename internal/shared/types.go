@@ -82,6 +82,16 @@ type Metrics struct {
 	RebalanceCount int                `json:"rebalance_count"`
 }
 
+// Band describes one VALOR governance constraint band.
+type Band struct {
+	Name        string  `json:"name"`
+	MinScore    float64 `json:"min_score"`
+	MaxScore    float64 `json:"max_score"`
+	MaxShare    float64 `json:"max_share"`
+	Action      string  `json:"action"`
+	Description string  `json:"description"`
+}
+
 // Action is the governance action emitted by VALOR.
 type Action struct {
 	PrimitiveID string  `json:"primitive_id"`

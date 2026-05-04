@@ -1,17 +1,30 @@
 FROM golang:1.24-alpine AS build
+
 WORKDIR /src
-COPY go.mod ./
+
+COPY go.mod go.sum* ./
 COPY cmd ./cmd
 COPY internal ./internal
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/stability-kernel ./cmd/stability-kernel
+COPY ark ./ark
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -ldflags='-s -w -X main.Version=1.0' \
+    -o /out/stability-kernel ./cmd/stability-kernel
 
 FROM alpine:3.20
+
 RUN apk add --no-cache ca-certificates wget \
     && addgroup -S ark \
     && adduser -S -G ark -H -h /nonexistent ark
+
 COPY --from=build /out/stability-kernel /usr/local/bin/stability-kernel
+
 USER ark
+
 EXPOSE 8081
+
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
   CMD wget --spider -q http://127.0.0.1:8081/health || exit 1
+
 ENTRYPOINT ["/usr/local/bin/stability-kernel"]

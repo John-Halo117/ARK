@@ -1,492 +1,175 @@
-name: ark
+version: '3.9'
 
-x-defaults: &defaults
-  restart: unless-stopped
-  networks:
-    - ark-net
-  logging:
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
-
-x-python-env: &python-env
-  PYTHONUNBUFFERED: "1"
-  NATS_URL: nats://nats:4222
-  ARK_GSB_ENABLED: "${ARK_GSB_ENABLED:-1}"
-
-x-go-env: &go-env
-  HTTP_READ_HEADER_TIMEOUT: "${HTTP_READ_HEADER_TIMEOUT:-5s}"
-  G_MAX: "${G_MAX:-0.8}"
-  SIGMA_K: "${SIGMA_K:-2.2}"
-  HYSTERESIS_LAMBDA: "${HYSTERESIS_LAMBDA:-0.08}"
-  BACKPRESSURE_EPS: "${BACKPRESSURE_EPS:-0.1}"
-  TIME_DECAY_RATE: "${TIME_DECAY_RATE:-0.2}"
+# Production Docker Compose Stack - COMPLETE & WIRED
+# All variables from .env, auto-generated configs, full validation
+# Run: bash init-prod.sh && docker compose up -d
 
 services:
-  nats:
-    <<: *defaults
-    image: nats:2.11-alpine
-    container_name: ark-nats
-    command: ["-js", "-sd", "/data", "-m", "8222"]
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: always
+    networks:
+      - proxy
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "80:80"
+      - "443:443"
+    environment:
+      TZ: ${TZ:-UTC}
+      TRAEFIK_LOG_LEVEL: ${TRAEFIK_LOG_LEVEL:-info}
     volumes:
-      - nats_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /srv/traefik/acme.json:/acme.json
+      - /srv/traefik/logs:/var/log/traefik
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.traefik.rule: "Host(`traefik.${TOP_LEVEL_DOMAIN:-example.com}`)"
+      traefik.http.routers.traefik.service: "api@internal"
+      traefik.http.routers.traefik.middlewares: "authelia@file"
+      traefik.http.routers.traefik.entrypoints: "websecure"
+      traefik.http.routers.traefik.tls: "true"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8222/healthz"]
-      interval: 10s
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
       timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 256M
+      retries: 3
+    depends_on:
+      - authelia
 
   redis:
-    <<: *defaults
-    image: redis:7-alpine
-    container_name: ark-redis
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 256M
-
-  duckdb:
-    <<: *defaults
-    image: ark-duckdb:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.duckdb
-    container_name: ark-duckdb
-    volumes:
-      - duckdb_data:/data
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 512M
-
-  mesh-registry:
-    <<: *defaults
-    image: ark-mesh:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.mesh
-    container_name: ark-mesh
-    environment:
-      <<: *python-env
-    ports:
-      - "7000:7000"
-    depends_on:
-      nats:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 512M
-
-  autoscaler:
-    <<: *defaults
-    image: ark-autoscaler:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.autoscaler
-    container_name: ark-autoscaler
-    environment:
-      <<: *python-env
-    ports:
-      - "7001:7001"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 512M
-
-  opencode:
-    <<: *defaults
-    image: ark-opencode:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.opencode
-    container_name: ark-opencode
-    environment:
-      <<: *python-env
-      INSTANCE_ID: opencode-base
-      SERVICE_NAME: opencode
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "1.00"
-          memory: 1G
-
-  openwolf:
-    <<: *defaults
-    image: ark-openwolf:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.openwolf
-    container_name: ark-openwolf
-    environment:
-      <<: *python-env
-      INSTANCE_ID: openwolf-base
-      SERVICE_NAME: openwolf
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 512M
-
-  composio:
-    <<: *defaults
-    image: ark-composio:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.composio
-    container_name: ark-composio
-    environment:
-      <<: *python-env
-      INSTANCE_ID: composio-base
-      SERVICE_NAME: composio
-      COMPOSIO_API_KEY: "${COMPOSIO_API_KEY:-}"
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "1.00"
-          memory: 1G
-
-  gateway:
-    <<: *defaults
-    image: ark-gateway:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    container_name: ark-gateway
-    environment:
-      <<: *python-env
-      MESH_URL: http://mesh-registry:7000
-    ports:
-      - "8080:8080"
-    volumes:
-      - duckdb_data:/data
-    depends_on:
-      nats:
-        condition: service_healthy
-      duckdb:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.75"
-          memory: 768M
-
-  ark:
-    image: ark-core:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.ark
-    container_name: ark-core
-    profiles: ["analysis"]
-    restart: "no"
+    image: redis:7.2-alpine
+    container_name: redis
+    restart: always
     networks:
-      - ark-net
-    environment:
-      RUST_LOG: "${RUST_LOG:-info}"
-    depends_on:
-      duckdb:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "1.00"
-          memory: 1G
+      - proxy
+    expose:
+      - 6379
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}" --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - /srv/redis/data:/data
+      - /srv/redis/logs:/var/log/redis
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  stability-kernel:
-    <<: *defaults
-    image: ark-stability-kernel:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.stability-kernel
-    container_name: ark-stability-kernel
+  authelia:
+    image: authelia/authelia:4.38.5
+    container_name: authelia
+    restart: always
+    networks:
+      - proxy
+    expose:
+      - 9091
     environment:
-      <<: *go-env
-      HTTP_ADDR: ":8081"
-      STABILITY_ALPHA_MAX: "${STABILITY_ALPHA_MAX:-0.3}"
-    ports:
-      - "8081:8081"
+      TZ: ${TZ:-UTC}
+      AUTHELIA_LOG_LEVEL: ${AUTHELIA_LOG_LEVEL:-info}
+      AUTHELIA_TOTP_SECRET: ${AUTHELIA_TOTP_SECRET}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - ./authelia/configuration.yml:/config/configuration.yml:ro
+      - ./authelia/users_database.yml:/config/users_database.yml:ro
+      - /srv/authelia/data:/data
+      - /srv/authelia/logs:/var/log/authelia
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.authelia.rule: "Host(`auth.${TOP_LEVEL_DOMAIN:-example.com}`) && PathPrefix(`/api/authz`)"
+      traefik.http.routers.authelia.service: "authelia"
+      traefik.http.routers.authelia.entrypoints: "websecure"
+      traefik.http.routers.authelia.tls: "true"
+      traefik.http.services.authelia.loadbalancer.server.port: "9091"
+      traefik.http.services.authelia.loadbalancer.server.scheme: "http"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       redis:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  ingestion-leader:
-    <<: *defaults
-    image: ark-ingestion-leader:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.ingestion-leader
-    container_name: ark-ingestion-leader
+  navidrome:
+    image: deluan/navidrome:0.51.1
+    container_name: navidrome
+    restart: always
+    networks:
+      - proxy
+    expose:
+      - 4533
     environment:
-      <<: *go-env
-      HTTP_ADDR: ":8080"
-      NATS_URL: nats://nats:4222
-      REDIS_ADDR: redis:6379
-      STABILITY_KERNEL_URL: http://stability-kernel:8081
-      CAS_ROOT: /cas
-    ports:
-      - "8083:8080"
+      TZ: ${TZ:-UTC}
+      ND_MUSICFOLDER: /music
+      ND_DATAFOLDER: /data
+      ND_UIVOLUME: 1.0
+      ND_LOGLEVEL: info
+      ND_SCANINTERVAL: 3600
+      ND_TRANSCODEMP3: "true"
+      ND_SESSIONTIMEOUT: 24
     volumes:
-      - type: bind
-        source: "${ARK_CAS_ROOT:-./data/cas}"
-        target: /cas
+      - ${MUSIC_PATH:-/srv/navidrome/music}:/music:ro
+      - ${DATA_PATH:-/srv/navidrome/data}:/data
+      - /srv/navidrome/logs:/var/log/navidrome
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.navidrome.rule: "Host(`music.${DOMAIN:-music.example.com}`)"
+      traefik.http.routers.navidrome.service: "navidrome"
+      traefik.http.routers.navidrome.middlewares: "authelia@file"
+      traefik.http.routers.navidrome.entrypoints: "websecure"
+      traefik.http.routers.navidrome.tls: "true"
+      traefik.http.services.navidrome.loadbalancer.server.port: "4533"
+      traefik.http.services.navidrome.loadbalancer.server.scheme: "http"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
-      nats:
+      authelia:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      stability-kernel:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: "0.75"
-          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4533/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
-  wireguard:
-    <<: *defaults
-    image: lscr.io/linuxserver/wireguard:latest
-    container_name: ark-wireguard
-    profiles: ["edge"]
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
+  home-assistant:
+    image: homeassistant/home-assistant:2024.2.0
+    container_name: home-assistant
+    restart: always
+    network_mode: host
     environment:
-      PUID: "${PUID:-1000}"
-      PGID: "${PGID:-1000}"
-      TZ: "${TZ:-UTC}"
-      SERVERURL: "${WIREGUARD_SERVERURL:-auto}"
-      SERVERPORT: "${WIREGUARD_SERVERPORT:-51820}"
-      PEERS: "${WIREGUARD_PEERS:-3}"
-      PEERDNS: "${WIREGUARD_PEERDNS:-auto}"
-    ports:
-      - "51820:51820/udp"
+      TZ: ${TZ:-UTC}
     volumes:
-      - wireguard_config:/config
-      - /lib/modules:/lib/modules:ro
-
-  netwatch:
-    <<: *defaults
-    image: ark-netwatch:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.netwatch
-    container_name: ark-netwatch
-    profiles: ["edge"]
-    environment:
-      <<: *go-env
-      HTTP_ADDR: ":8082"
-      STABILITY_KERNEL_URL: http://stability-kernel:8081
-      WG_STATUS_SOURCE: /etc/wireguard
-      ARK_API_TOKEN: "${ARK_API_TOKEN:-}"
-      ARK_AUDIT_LOG_PATH: /data/audit.log
-      ARK_SIGNING_SEED_HEX: "${ARK_SIGNING_SEED_HEX:-0000000000000000000000000000000000000000000000000000000000000001}"
-    ports:
-      - "8082:8082"
-    volumes:
-      - netwatch_data:/data
-      - wireguard_config:/etc/wireguard:ro
-    depends_on:
-      stability-kernel:
-        condition: service_healthy
-      wireguard:
-        condition: service_started
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 256M
-
-  ha-emitter:
-    <<: *defaults
-    image: ark-ha-emitter:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.ha-emitter
-    container_name: ark-ha-emitter
-    profiles: ["emitters"]
-    environment:
-      <<: *python-env
-      INSTANCE_ID: homeassistant-0
-      HA_URL: "${HA_URL:-http://homeassistant:8123}"
-      HA_TOKEN: "${HA_TOKEN:-}"
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-
-  jellyfin-emitter:
-    <<: *defaults
-    image: ark-jellyfin-emitter:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.jellyfin-emitter
-    container_name: ark-jellyfin-emitter
-    profiles: ["emitters"]
-    environment:
-      <<: *python-env
-      INSTANCE_ID: jellyfin-0
-      JELLYFIN_URL: "${JELLYFIN_URL:-http://jellyfin:8096}"
-      JELLYFIN_TOKEN: "${JELLYFIN_TOKEN:-}"
-      JELLYFIN_USER_ID: "${JELLYFIN_USER_ID:-}"
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-
-  unifi-emitter:
-    <<: *defaults
-    image: ark-unifi-emitter:latest
-    build:
-      context: .
-      dockerfile: Dockerfile.unifi-emitter
-    container_name: ark-unifi-emitter
-    profiles: ["emitters"]
-    environment:
-      <<: *python-env
-      INSTANCE_ID: unifi-0
-      UNIFI_URL: "${UNIFI_URL:-https://unifi:8443}"
-      UNIFI_USERNAME: "${UNIFI_USERNAME:-}"
-      UNIFI_PASSWORD: "${UNIFI_PASSWORD:-}"
-      UNIFI_SITE: "${UNIFI_SITE:-default}"
-      UNIFI_CA_BUNDLE: "${UNIFI_CA_BUNDLE:-}"
-    depends_on:
-      nats:
-        condition: service_healthy
-      mesh-registry:
-        condition: service_healthy
-
-  n8n:
-    <<: *defaults
-    image: n8nio/n8n:latest
-    container_name: ark-n8n
-    profiles: ["apps"]
-    environment:
-      N8N_HOST: "${N8N_HOST:-localhost}"
-      N8N_PORT: "5678"
-      N8N_PROTOCOL: "${N8N_PROTOCOL:-http}"
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-
-  homeassistant:
-    <<: *defaults
-    image: ghcr.io/home-assistant/home-assistant:stable
-    container_name: ark-homeassistant
-    profiles: ["apps"]
-    ports:
-      - "8123:8123"
-    volumes:
-      - homeassistant_config:/config
-
-  grafana:
-    <<: *defaults
-    image: grafana/grafana:latest
-    container_name: ark-grafana
-    profiles: ["observability"]
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: "${GF_ADMIN_PASSWORD:-ark-admin}"
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-
-  meilisearch:
-    <<: *defaults
-    image: getmeili/meilisearch:v1.12
-    container_name: ark-meilisearch
-    profiles: ["observability"]
-    environment:
-      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY:-ark-dev-master-key}"
-    ports:
-      - "7700:7700"
-    volumes:
-      - meili_data:/meili_data
-
-  minio:
-    <<: *defaults
-    image: minio/minio:latest
-    container_name: ark-minio
-    profiles: ["observability"]
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
-      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minioadmin123}"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
+      - /srv/home-assistant/config:/config
+      - /srv/home-assistant/logs:/var/log/homeassistant
+      - /etc/localtime:/etc/localtime:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
-  ark-net:
-    name: ark-net
+  proxy:
     driver: bridge
-
-volumes:
-  nats_data:
-  redis_data:
-  duckdb_data:
-  wireguard_config:
-  netwatch_data:
-  n8n_data:
-  homeassistant_config:
-  grafana_data:
-  meili_data:
-  minio_data:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
