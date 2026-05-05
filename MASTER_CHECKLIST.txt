@@ -1,0 +1,428 @@
+#!/usr/bin/env bash
+##############################################################################
+# PRODUCTION MASTER CHECKLIST
+# Complete pre-deployment verification
+##############################################################################
+
+cat << 'EOF'
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                     PRODUCTION MASTER CHECKLIST                             ║
+║                  Complete Pre-Deployment Verification                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+SECTION 1: UNDERSTANDING THE STACK
+════════════════════════════════════════════════════════════════════════════════
+
+[ ] I understand the architecture:
+    - Traefik v3 (reverse proxy, TLS, routing)
+    - Authelia (authentication, 2FA)
+    - Navidrome (music streaming)
+    - Redis (session store)
+    - Home Assistant (smart home)
+
+[ ] I understand security:
+    - All traffic encrypted (HTTPS only)
+    - All services behind Authelia forwardAuth
+    - No default credentials
+    - Strong passwords required
+    - TOTP 2FA supported
+
+[ ] I understand the deployment:
+    - Manual configuration required (.env)
+    - Auto-config generation (init-prod.sh)
+    - Staging deployment (test certificates)
+    - Production deployment (real certificates)
+
+
+SECTION 2: PREREQUISITES
+════════════════════════════════════════════════════════════════════════════════
+
+HARDWARE & NETWORK:
+  [ ] Server with 2+ CPU cores, 4GB+ RAM
+  [ ] 50GB+ free disk space
+  [ ] Stable internet connection
+  [ ] Static IP or dynamic DNS
+  [ ] Port 80/443 open on firewall
+
+SOFTWARE:
+  [ ] Docker Engine 20.10+ installed
+  [ ] docker-compose 2.0+ installed
+  [ ] curl or wget available
+  [ ] bash 4.0+ available
+  [ ] openssl available
+
+DOMAIN & DNS:
+  [ ] Domain registered (e.g., example.com)
+  [ ] Access to DNS settings
+  [ ] Understand how to add A records
+  [ ] Ready to create: music.example.com → server IP
+
+
+SECTION 3: ENVIRONMENT SETUP
+════════════════════════════════════════════════════════════════════════════════
+
+DOMAIN CONFIGURATION:
+  [ ] Registered domain: _________________ (e.g., example.com)
+  [ ] Music subdomain: _________________ (e.g., music.example.com)
+  [ ] Email for Let's Encrypt: _________________ (e.g., admin@example.com)
+
+DIRECTORY SETUP:
+  [ ] Music library path: _________________ (e.g., /srv/navidrome/music)
+  [ ] Data directory path: _________________ (e.g., /srv/navidrome/data)
+  [ ] Both paths exist and readable/writable
+
+SECURITY CREDENTIALS:
+  [ ] Generated REDIS_PASSWORD (openssl rand -base64 32)
+      Password: _________________________________________________________________
+  [ ] Generated AUTHELIA_TOTP_SECRET (openssl rand -base64 32)
+      Secret: _________________________________________________________________
+
+FILES:
+  [ ] Copy .env.prod to .env
+  [ ] Edit .env with all above values
+  [ ] No CHANGE_ME values remaining in .env
+  [ ] chmod 600 .env
+
+
+SECTION 4: DNS CONFIGURATION
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Get server public IP: _________________ (curl -s https://ifconfig.me)
+  [ ] Log into domain registrar
+  [ ] Create A record:
+      Domain: music.example.com
+      Type: A
+      Value: YOUR_SERVER_IP
+      TTL: 3600 (default OK)
+  [ ] Save DNS record
+  [ ] Wait 5-10 minutes for propagation
+  [ ] Verify: nslookup music.example.com (should return your IP)
+
+
+SECTION 5: FIREWALL & NETWORKING
+════════════════════════════════════════════════════════════════════════════════
+
+OPEN PORTS (CRITICAL):
+  [ ] Port 80 (HTTP) open
+  [ ] Port 443 (HTTPS) open
+
+  Commands (ufw):
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+    sudo ufw reload
+
+  Commands (iptables):
+    sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+    sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+  Cloud platforms (AWS/Digital Ocean/etc):
+    Add Security Group / Firewall rules:
+    - Inbound: HTTP (80) from 0.0.0.0/0
+    - Inbound: HTTPS (443) from 0.0.0.0/0
+
+VERIFY PORTS OPEN:
+  [ ] curl http://localhost:80 (on server)
+  [ ] curl https://localhost:443 (on server)
+
+
+SECTION 6: MUSIC LIBRARY
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Music library directory created: $MUSIC_PATH
+  [ ] Music files copied to directory (*.mp3, *.flac, *.m4a, *.ogg)
+  [ ] At least 1 file present (for testing)
+  [ ] File permissions readable: ls -l /srv/navidrome/music/
+
+
+SECTION 7: INITIALIZATION
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Run initialization script:
+      bash init-prod.sh
+
+  Expected output:
+    [ ] ✓ Docker daemon running
+    [ ] ✓ docker-compose installed
+    [ ] ✓ .env validated (all variables set)
+    [ ] ✓ Directories created
+    [ ] ✓ acme.json created (mode 600)
+    [ ] ✓ traefik/traefik.yml generated
+    [ ] ✓ traefik/dynamic.yml generated
+    [ ] ✓ authelia/configuration.yml generated
+    [ ] ✓ authelia/users_database.yml created
+    [ ] ✓ DNS resolves
+    [ ] ✓ All checks pass
+
+  [ ] Fix any failures and re-run init-prod.sh
+  [ ] No errors in final summary
+
+
+SECTION 8: VALIDATION
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Run final validation script:
+      bash validate-prod.sh
+
+  Expected output:
+    [ ] ✓ Environment & Configuration
+    [ ] ✓ Docker & docker-compose
+    [ ] ✓ Configuration Files
+    [ ] ✓ Directories & Permissions
+    [ ] ✓ DNS Validation
+    [ ] ✓ Port Availability
+    [ ] ✓ Stack Deployment
+    [ ] ✓ Service Health
+    [ ] ✓ URL Validation
+    [ ] ✓ Config Variable Wiring
+    [ ] ✓ Security Checks
+
+  [ ] No failures reported
+  [ ] "PRODUCTION READY" message displayed
+
+
+SECTION 9: STAGING DEPLOYMENT
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Deploy to staging (test certificates):
+      bash deploy-prod.sh staging
+
+  Expected:
+    [ ] Services start successfully
+    [ ] All services report "healthy"
+    [ ] Traefik dashboard accessible
+    [ ] Authelia responding
+    [ ] Certificates obtained (staging)
+
+  [ ] Monitor logs in another terminal:
+      docker-compose logs -f
+
+  [ ] Test endpoints:
+      [ ] https://music.example.com (redirects to login)
+      [ ] https://traefik.example.com/dashboard/ (auth required)
+      [ ] https://auth.example.com (login page)
+
+  [ ] Review logs for any errors:
+      [ ] docker-compose logs | grep -i error
+      [ ] cat /srv/traefik/logs/traefik.log | grep -i error
+      [ ] cat /srv/authelia/logs/authelia.log | grep -i error
+
+
+SECTION 10: SECURITY - CHANGE PASSWORD
+════════════════════════════════════════════════════════════════════════════════
+
+  CRITICAL: Default password "authelia" must be changed!
+
+  [ ] Generate password hash:
+      docker run --rm authelia/authelia:4.38.5 authelia hash-password
+
+  [ ] When prompted, enter your new password
+  [ ] Copy the hash (starts with $2a$ or $pbkdf2)
+
+  [ ] Edit users database:
+      nano authelia/users_database.yml
+
+  [ ] Replace line:
+      password: "$2a$12$e3lGZ8XJwXArv8/VIu2R4edm5g1OikM2nSvR53PocUGyMAK8yToiK"
+
+      With:
+      password: "YOUR_NEW_HASH_HERE"
+
+  [ ] Save file (Ctrl+O, Enter, Ctrl+X)
+
+  [ ] Restart Authelia:
+      docker-compose restart authelia
+
+  [ ] Test new password:
+      [ ] Try login with old password (should fail)
+      [ ] Try login with new password (should succeed)
+
+
+SECTION 11: PRODUCTION DEPLOYMENT
+════════════════════════════════════════════════════════════════════════════════
+
+  CAUTION: Let's Encrypt production has rate limits!
+  50 certificates per domain per week
+
+  [ ] You're satisfied with staging deployment
+  [ ] Password changed from default
+  [ ] All tests passing
+  [ ] Ready for real certificates
+
+  [ ] Deploy to production:
+      bash deploy-prod.sh production
+
+  Expected:
+    [ ] Production Let's Encrypt certificates obtained
+    [ ] Services start successfully
+    [ ] HTTPS shows green lock in browser
+    [ ] All services healthy
+
+  [ ] Monitor deployment:
+      docker-compose logs -f
+
+
+SECTION 12: POST-DEPLOYMENT SECURITY
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Enable TOTP 2FA (recommended):
+      [ ] Access https://music.example.com
+      [ ] Login with admin credentials
+      [ ] Click "Settings"
+      [ ] Click "Two-Factor Authentication"
+      [ ] Scan QR code with authenticator app:
+          - Google Authenticator
+          - Authy
+          - Microsoft Authenticator
+          - Bitwarden
+      [ ] Save & enable
+
+  [ ] Create additional users (optional):
+      [ ] Generate password hashes for each user
+      [ ] Add to authelia/users_database.yml
+      [ ] Restart Authelia
+
+  [ ] Document credentials (password manager):
+      [ ] Store admin password in password manager
+      [ ] Store 2FA backup codes
+      [ ] Store TOTP secret backup
+
+  [ ] Set up monitoring:
+      [ ] Run continuous monitoring:
+          bash monitor-prod.sh monitor
+      [ ] In separate terminal (optional)
+      [ ] Or add monitoring to crontab
+
+
+SECTION 13: BACKUPS
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Test manual backup:
+      bash backup-prod.sh
+
+  [ ] Verify backup created:
+      ls -lah /srv/backups/
+
+  [ ] Setup automated daily backup (2 AM):
+      (crontab -l 2>/dev/null; echo "0 2 * * * cd ~/music-stack && bash backup-prod.sh") | crontab -
+
+  [ ] Verify crontab:
+      crontab -l
+
+
+SECTION 14: INITIAL TESTING
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Access Navidrome:
+      [ ] Visit https://music.example.com
+      [ ] Login with admin credentials
+      [ ] Browse music library
+      [ ] Play a song
+      [ ] Test playlist creation
+      [ ] Test mobile client (if available)
+
+  [ ] Access Traefik Dashboard:
+      [ ] Visit https://traefik.example.com/dashboard/
+      [ ] Login with admin credentials
+      [ ] View active routes
+      [ ] Check certificate status
+      [ ] View request metrics
+
+  [ ] Check system health:
+      [ ] bash monitor-prod.sh
+      [ ] Review: service health, disk space, logs, backups
+      [ ] All should be healthy
+
+  [ ] Check logs:
+      [ ] docker-compose logs | grep -i error (should be empty or minimal)
+      [ ] cat /srv/traefik/logs/traefik.log | tail -20
+      [ ] cat /srv/authelia/logs/authelia.log | tail -20
+      [ ] cat /srv/navidrome/logs/navidrome.log | tail -20
+
+
+SECTION 15: DOCUMENTATION & RUNBOOKS
+════════════════════════════════════════════════════════════════════════════════
+
+  [ ] Save documentation:
+      [ ] PRODUCTION_GUIDE.txt - Full deployment guide
+      [ ] PROD_REFERENCE.md - Quick reference
+      [ ] ARCHITECTURE.md - System design
+      [ ] README_PROD.md - Summary
+
+  [ ] Document credentials:
+      [ ] Admin password (in password manager)
+      [ ] TOTP backup codes
+      [ ] SSH keys
+      [ ] Domain registrar access
+
+  [ ] Create runbooks:
+      [ ] Daily health check: bash monitor-prod.sh
+      [ ] View logs: docker-compose logs -f
+      [ ] Restart service: docker-compose restart SERVICE
+      [ ] Backup: bash backup-prod.sh
+      [ ] Restore: (documented in backup file)
+
+  [ ] Create emergency contact list:
+      [ ] Your email
+      [ ] IT support
+      [ ] Hosting provider support
+      [ ] Let's Encrypt documentation
+
+
+SECTION 16: ONGOING MAINTENANCE
+════════════════════════════════════════════════════════════════════════════════
+
+DAILY:
+  [ ] Check health: bash monitor-prod.sh
+
+WEEKLY:
+  [ ] Review logs: docker-compose logs | grep -i error
+  [ ] Verify backups: ls -lah /srv/backups/ (recent file present)
+
+MONTHLY:
+  [ ] Update images: docker-compose pull && docker-compose up -d
+  [ ] Security audit: Check Traefik/Authelia release notes
+  [ ] Test restore: (from backup, in staging environment)
+
+QUARTERLY:
+  [ ] SSL certificate check: openssl s_client -connect music.example.com:443
+  [ ] Disk space review: df -h /srv
+  [ ] Performance check: docker stats
+
+
+SECTION 17: COMPLETION CHECKLIST
+════════════════════════════════════════════════════════════════════════════════
+
+FINAL VERIFICATION:
+  [ ] All URLs working (https://music.example.com, etc.)
+  [ ] Authentication required and working
+  [ ] HTTPS/TLS working (green lock in browser)
+  [ ] Music playback working
+  [ ] Dashboard accessible
+  [ ] Backups configured and tested
+  [ ] Monitoring configured
+  [ ] Logs reviewed (no errors)
+  [ ] Default password changed
+  [ ] 2FA enabled (optional but recommended)
+  [ ] Documentation saved
+  [ ] Emergency contacts documented
+
+PRODUCTION STATUS:
+  ✅ DEPLOYED & RUNNING
+  ✅ FULLY SECURED
+  ✅ BACKUPS ENABLED
+  ✅ MONITORING ACTIVE
+  ✅ READY FOR USE
+
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Congratulations! Your production music stack is deployed and secure. 🎉
+
+Start date: ________________
+Deployed by: ________________
+Support contact: ________________
+
+═══════════════════════════════════════════════════════════════════════════════
+
+EOF
