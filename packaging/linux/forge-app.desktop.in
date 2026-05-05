@@ -2,12 +2,13 @@
 Type=Application
 Version=1.0
 Name=Forge
-Comment=Open the Forge coding app for ARK
+GenericName=Local coding assistant
+Comment=Local, deterministic coding app for ARK
 TryExec=__BIN__/forge-app
 Exec=__BIN__/forge-app
 Path=__ROOT__
 Icon=forge-app
 Terminal=false
 Categories=Development;IDE;
-Keywords=forge;ark;ollama;code;
+Keywords=forge;ark;ollama;code;developer;local;
 StartupNotify=true

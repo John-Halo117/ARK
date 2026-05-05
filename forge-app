@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_BIN="$ROOT_DIR/ark-core/.venv/bin/python"
+APP_NAME="Forge"
 PORT="${FORGE_DESKTOP_PORT:-4765}"
 URL="http://127.0.0.1:${PORT}/"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/forge"
@@ -22,6 +23,23 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   fi
 fi
 
+print_help() {
+  cat <<EOF
+Forge - local coding app
+
+Usage:
+  forge-app              Open Forge in your browser
+  forge-app --status     Show whether the Forge browser app is running
+  forge-app --stop       Stop Forge browser app processes started by this launcher
+  forge-app --cleanup    Remove stale Forge pid/log files
+
+Environment:
+  FORGE_DESKTOP_PORT     Browser app port, default: 4765
+
+Forge is user-local. It creates no systemd service and no background daemon.
+EOF
+}
+
 probe_app() {
   "$PYTHON_BIN" - "$URL" <<'PY' >/dev/null 2>&1
 import json
@@ -39,6 +57,49 @@ raise SystemExit(0)
 PY
 }
 
+cleanup_stale_state() {
+  shopt -s nullglob
+  local pid_file pid port log_file
+  for pid_file in "$STATE_DIR"/browser-app-*.pid; do
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
+      port="${pid_file##*-}"
+      port="${port%.pid}"
+      log_file="$STATE_DIR/browser-app-${port}.log"
+      rm -f "$pid_file"
+      [[ ! -s "$log_file" ]] && rm -f "$log_file"
+    fi
+  done
+}
+
+stop_managed_apps() {
+  shopt -s nullglob
+  local pid_file pid stopped=0
+  for pid_file in "$STATE_DIR"/browser-app-*.pid; do
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      stopped=1
+    fi
+    rm -f "$pid_file"
+  done
+  if [[ "$stopped" == "1" ]]; then
+    echo "Stopped Forge browser app."
+  else
+    echo "No managed Forge browser app process was running."
+  fi
+}
+
+print_status() {
+  cleanup_stale_state
+  if probe_app; then
+    echo "Forge is running at $URL"
+    return 0
+  fi
+  echo "Forge is not running."
+  return 1
+}
+
 open_browser() {
   if command -v xdg-open >/dev/null 2>&1; then
     xdg-open "$URL" >/dev/null 2>&1 &
@@ -47,8 +108,32 @@ open_browser() {
   "$PYTHON_BIN" -m webbrowser "$URL" >/dev/null 2>&1 &
 }
 
+case "${1:-}" in
+  --help|-h)
+    print_help
+    exit 0
+    ;;
+  --cleanup)
+    cleanup_stale_state
+    echo "Cleaned stale Forge desktop state in $STATE_DIR"
+    exit 0
+    ;;
+  --status)
+    print_status
+    exit $?
+    ;;
+  --stop)
+    stop_managed_apps
+    cleanup_stale_state
+    exit 0
+    ;;
+esac
+
+cleanup_stale_state
+
 if probe_app; then
   open_browser || true
+  echo "$APP_NAME is already running at $URL"
   exit 0
 fi
 
@@ -62,8 +147,8 @@ echo "$!" >"$PID_FILE"
 for _attempt in {1..40}; do
   if probe_app; then
     open_browser || true
-    echo "Forge browser app launched at $URL"
-    echo "No systemd service was created. Use the Forge Shutdown button when you are done."
+    echo "$APP_NAME launched at $URL"
+    echo "No systemd service was created. Use: forge-app --stop"
     exit 0
   fi
   sleep 0.25
@@ -71,4 +156,5 @@ done
 
 echo "Forge browser app did not become ready." >&2
 echo "Check the log: $LOG_FILE" >&2
+rm -f "$PID_FILE"
 exit 1

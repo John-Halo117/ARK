@@ -6,6 +6,7 @@ from collections import deque
 import json
 from pathlib import Path
 import threading
+import time
 from typing import Any, Callable
 
 from ..runtime.bootstrap import (
@@ -14,7 +15,7 @@ from ..runtime.bootstrap import (
     ensure_runtime_ready,
 )
 from ..runtime.config import (
-    DEFAULT_CONTEXT_CONFIG,
+    DEFAULT_RUNTIME_BOOTSTRAP_CONFIG,
     DEFAULT_UI_STATE_CONFIG,
     UiToolProfile,
 )
@@ -32,14 +33,18 @@ from .common import (
     RunRequest,
     artifacts_dir_for_repo,
     build_client_from_request,
+    build_codebase_wiki,
+    build_tool_actions,
     candidate_from_payload,
     candidate_payload,
     candidate_status,
     command_legend,
     event_status,
     example_tasks,
+    health_cards,
     find_history_index,
     history_record_from_result,
+    improvement_plan,
     load_history_records,
     quickstart_steps,
     record_diff_text,
@@ -80,7 +85,7 @@ class ForgeOperatorController:
         runtime_probe: Callable[..., tuple[str | None, list[str]]] | None = None,
         model_selector: Callable[..., str | None] | None = None,
         history_loader: Callable[..., list[HistoryRecord]] | None = None,
-        client_builder: Callable[..., tuple[object | None, str]] | None = None,
+        client_builder: Callable[..., tuple[object, str]] | None = None,
         capability_detector: Callable[[Path], list[CapabilityStatus]] | None = None,
         runtime_status_probe: Callable[..., RuntimeStatus] | None = None,
         runtime_bootstrapper: Callable[..., RuntimeStatus] | None = None,
@@ -123,12 +128,16 @@ class ForgeOperatorController:
             self.session.applied_history
         )
         self.capabilities: list[CapabilityStatus] = []
+        self._cached_wiki: list[dict[str, Any]] = []
+        self._cached_tool_actions: list[dict[str, Any]] = []
         self._runtime_boot_thread: threading.Thread | None = None
+        self._runtime_watchdog_thread: threading.Thread | None = None
         restored_logs = bool(self.logs)
         self.refresh_runtime(log_runtime=True, auto_boot=True)
         self.refresh_history()
         if not restored_logs:
             self.log("Forge ready. Type a task and press Start.")
+        self._start_runtime_watchdog()
 
     def refresh_runtime(
         self,
@@ -158,8 +167,9 @@ class ForgeOperatorController:
         self.machine_state["runtime_model"] = status.model
         self.machine_state["runtime_models"] = list(status.models)
         if not status.ready:
-            self.machine_state["status"] = "RUNTIME MISSING"
-        elif self.machine_state.get("status") == "RUNTIME MISSING":
+            self.machine_state["status"] = "WAITING"
+            self.machine_state["stage_label"] = "warming ai"
+        elif self.machine_state.get("stage_label") == "warming ai":
             self.machine_state["status"] = "WAITING"
             self.machine_state["stage_label"] = "idle"
         if log_runtime:
@@ -195,12 +205,39 @@ class ForgeOperatorController:
         self.log(status.message if not status.ready else "Local AI is ready.")
         self.persist_session()
 
+    def _start_runtime_watchdog(self) -> None:
+        if self._runtime_watchdog_thread is not None:
+            return
+        self._runtime_watchdog_thread = threading.Thread(
+            target=self._runtime_watchdog_worker,
+            daemon=True,
+        )
+        self._runtime_watchdog_thread.start()
+
+    def _runtime_watchdog_worker(self) -> None:
+        config = DEFAULT_RUNTIME_BOOTSTRAP_CONFIG
+        for _ in range(config.watchdog_checks):
+            time.sleep(config.watchdog_interval_s)
+            status = (self.runtime_status_probe or detect_runtime_status)(
+                preferred_url=self.preferred_url,
+                preferred_model=self.preferred_model,
+            )
+            was_ready = self.runtime_status.ready
+            self._apply_runtime_status(status, log_runtime=False)
+            if was_ready and not status.ready:
+                self.log("Local AI disconnected; Forge is waking it back up.")
+                self._start_runtime_boot(force=True)
+
     def refresh_capabilities(self) -> None:
         detector = self.capability_detector or detect_capabilities
         self.capabilities = detector(self.repo_root)
         self.machine_state["capabilities"] = [
             item.as_dict() for item in self.capabilities
         ]
+        self._cached_wiki = build_codebase_wiki(self.repo_root)
+        self._cached_tool_actions = build_tool_actions(
+            self.repo_root, self.capabilities
+        )
 
     def refresh_history(self) -> None:
         history_loader = self.history_loader or load_history_records
@@ -282,6 +319,14 @@ class ForgeOperatorController:
             "workflow_presets": workflow_presets(),
             "tool_profiles": tool_profiles(),
             "capabilities": [item.as_dict() for item in self.capabilities],
+            "health_cards": health_cards(
+                self.runtime_status.as_dict(),
+                self.capabilities,
+                running=self.running,
+            ),
+            "codebase_wiki": self._cached_wiki,
+            "improvement_plan": improvement_plan(),
+            "tool_actions": self._cached_tool_actions,
             "selected_label": selected_label(record),
             "running": self.running,
         }
@@ -419,19 +464,19 @@ class ForgeOperatorController:
         self.machine_state["mode_override"] = mapping[value]
         self.machine_state["mode"] = mapping[value]
         self.persist_session()
-        self.log(f"Mode override: {mapping[value]}")
+        self.log(f"Search style set to {_friendly_mode(mapping[value])}.")
         return True
 
     def set_tau(self, value: str) -> bool:
         try:
             parsed = max(0.0, min(1.0, float(value)))
         except ValueError:
-            self.log("Tau must be a number between 0 and 1.")
+            self.log("Strictness must be a number between 0 and 1.")
             return False
         self.controls["risk_threshold"] = parsed
         self.machine_state["risk_threshold"] = parsed
         self.persist_session()
-        self.log(f"Risk threshold set to {parsed:.2f}")
+        self.log(f"Safety strictness updated: {_friendly_tau(parsed)}.")
         return True
 
     def set_flag(self, name: str, enabled: bool, label: str) -> None:
@@ -447,16 +492,12 @@ class ForgeOperatorController:
             0, min(DEFAULT_UI_STATE_CONFIG.max_context_level, current + delta)
         )
         if updated == current:
-            self.log(f"Context already at level {current}.")
+            self.log(f"Context is already {_friendly_context(current)}.")
             return False
         self.controls["context_level"] = updated
         self.machine_state["context_level"] = updated
         self.persist_session()
-        self.log(
-            "Context level "
-            f"{updated}: up to {DEFAULT_CONTEXT_CONFIG.target_budget(updated)} files, "
-            f"excerpt budget {DEFAULT_CONTEXT_CONFIG.excerpt_limit(updated)} chars."
-        )
+        self.log(f"Context scope set to {_friendly_context(updated)}.")
         return True
 
     def set_test_mode(self, value: str) -> bool:
@@ -845,3 +886,33 @@ def _find_tool_profile(identifier: str) -> UiToolProfile | None:
         if profile.identifier == identifier:
             return profile
     return None
+
+
+def _friendly_mode(mode: str) -> str:
+    mapping = {
+        "AUTO": "Balanced",
+        "SIMPLE": "Focused",
+        "BISECT": "Compare two options",
+        "TRISECT": "Compare three options",
+    }
+    return mapping.get(mode, mode.title())
+
+
+def _friendly_tau(value: float) -> str:
+    if value <= 0.25:
+        return "very strict"
+    if value <= 0.40:
+        return "normal"
+    if value <= 0.65:
+        return "flexible"
+    return "loose, review carefully"
+
+
+def _friendly_context(level: int) -> str:
+    mapping = {
+        0: "Small",
+        1: "Normal",
+        2: "Broad",
+        3: "Deep",
+    }
+    return mapping.get(level, f"Level {level}")

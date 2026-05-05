@@ -1,0 +1,11 @@
+# ARK-Field v4.2 Cursor Guidelines
+
+- Treat Git commit history as the primary structural source of truth.
+- Route all event mutations through ingestion leader; do not bypass single-writer flow.
+- Require Stability Kernel decision before executing network, automation, or publish actions.
+- On any freeze/guard failure, switch to S2 baseline in one step.
+- Keep event payloads canonical and deterministic (stable JSON field naming and hashing inputs).
+- Prefer bounded execution (timeouts, burst caps, explicit retries).
+- For NetWatch actions, disallow unbounded browser bursts and ungated external hooks.
+- Keep modules orthogonal: adapters for IO, core logic in internal domain packages.
+- Projection writes are append-only and replay-safe.
