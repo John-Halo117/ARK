@@ -88,7 +88,7 @@ if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "music.example.com" ]; then
   warn "Domain not set or using example.com; update DOMAIN in .env"
 else
   pass "Domain configured: $DOMAIN"
-  
+
   # Check DNS resolution
   check "DNS resolution for $DOMAIN"
   if host "$DOMAIN" &> /dev/null || nslookup "$DOMAIN" &> /dev/null; then
@@ -214,7 +214,7 @@ fi
 check "docker-compose.yml exists"
 if [ -f docker-compose.yml ]; then
   pass "docker-compose.yml found"
-  
+
   # Validate YAML syntax
   if docker-compose config > /dev/null 2>&1; then
     pass "docker-compose.yml syntax valid"

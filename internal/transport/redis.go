@@ -60,6 +60,27 @@ func (c *RedisClient) Set(key, value string) error {
 	return nil
 }
 
+func (c *RedisClient) SetNXEX(key, value string, ttlSeconds int) (bool, error) {
+	if ttlSeconds <= 0 {
+		return false, errors.New("ttl_seconds must be positive")
+	}
+	resp, err := c.cmd("SET", key, value, "NX", "EX", strconv.Itoa(ttlSeconds))
+	if err != nil {
+		if errors.Is(err, errRedisNil) {
+			return false, nil
+		}
+		return false, err
+	}
+	return resp == "OK", nil
+}
+
+func (c *RedisClient) Del(key string) error {
+	if _, err := c.cmd("DEL", key); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *RedisClient) Incr(key string) (uint64, error) {
 	resp, err := c.cmd("INCR", key)
 	if err != nil {

@@ -219,7 +219,7 @@ jobs:
         with:
           body: |
             ARK v1.0 Production Release
-            
+
             Services built and pushed:
             - ark-gateway:${{ github.ref_name }}
             - ark-mesh:${{ github.ref_name }}
@@ -229,9 +229,9 @@ jobs:
             - ark-openwolf:${{ github.ref_name }}
             - ark-stability-kernel:${{ github.ref_name }}
             - ark-ingestion-leader:${{ github.ref_name }}
-            
+
             Pull with: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-<service>:${{ github.ref_name }}
-            
+
             Compose stack available at docker-compose.yml (update image tags to ${{ github.ref_name }})
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

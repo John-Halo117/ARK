@@ -71,7 +71,7 @@ session:
   expiration: 3600  # 1 hour
   inactivity: 300   # 5 minutes (logout if idle)
   remember_me_duration: 30d
-  
+
   # Session data stored in Redis
   provider: redis
   redis:
@@ -117,7 +117,7 @@ authentication_backend:
     #   enabled: true
 
   refresh_interval: 5m
-  
+
   # File-based users (users_database.yml)
   file:
     path: /config/users_database.yml
@@ -131,7 +131,7 @@ authentication_backend:
 access_control:
   # Default policy (deny all unless explicitly allowed)
   default_policy: deny
-  
+
   rules:
     # Allow anonymous access to /health (for healthchecks)
     - domain: "auth.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
@@ -139,7 +139,7 @@ access_control:
       policy: bypass
       methods:
         - GET
-    
+
     # Forward auth endpoint (called by Traefik)
     # Must bypass auth (called during auth process)
     - domain: "auth.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
@@ -148,7 +148,7 @@ access_control:
       methods:
         - GET
         - POST
-    
+
     # Allow authenticated users to access Navidrome
     - domain: "music.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
       policy: one_factor
@@ -158,14 +158,14 @@ access_control:
         - PUT
         - DELETE
         - OPTIONS
-    
+
     # Allow authenticated users to access Traefik dashboard
     - domain: "traefik.example.com"  # CHANGE_ME: Update to match DOMAIN in .env
       policy: one_factor
       methods:
         - GET
         - POST
-    
+
     # Allow authenticated users to access Home Assistant (if using Traefik)
     - domain: "ha.example.com"  # CHANGE_ME: Update if using Traefik for HA
       policy: one_factor
@@ -195,7 +195,7 @@ cookies:
 notifier:
   disable: true
   # If enabled, configure one of:
-  
+
   # SMTP (email notifications)
   # smtp:
   #   host: smtp.gmail.com
@@ -208,11 +208,11 @@ notifier:
   #   disable_require_tls: false
   #   tls:
   #     skip_verify: false
-  
+
   # Slack webhook
   # slack:
   #   webhook_url: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
-  
+
   # Generic webhook
   # webhook:
   #   url: https://example.com/webhook

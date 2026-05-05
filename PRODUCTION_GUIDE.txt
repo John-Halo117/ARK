@@ -114,7 +114,7 @@ STEP 4: VERIFY FIREWALL (Critical!)
 ─────────────────────────────────────────────────────────────────────────────
 
   # Open ports 80 and 443 (required for Let's Encrypt and HTTPS)
-  
+
   If using iptables:
     sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
     sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
@@ -188,7 +188,7 @@ STEP 7: CHANGE DEFAULT PASSWORD (CRITICAL!)
 
   # Replace default hash with your new hash:
   # password: "$2a$12$..." → password: "YOUR_NEW_HASH"
-  
+
   # Restart Authelia
   docker-compose restart authelia
 

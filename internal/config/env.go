@@ -84,6 +84,10 @@ func envOr(k, d string) string {
 	return d
 }
 
+func String(k, d string) string {
+	return envOr(k, d)
+}
+
 func envFloatOr(k string, d float64) float64 {
 	if v := os.Getenv(k); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
@@ -91,6 +95,10 @@ func envFloatOr(k string, d float64) float64 {
 		}
 	}
 	return d
+}
+
+func Float64(k string, d float64) float64 {
+	return envFloatOr(k, d)
 }
 
 func envDurationOr(k string, d time.Duration) time.Duration {

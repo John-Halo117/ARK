@@ -32,7 +32,7 @@ http:
         referrerPolicy: "strict-origin-when-cross-origin"
         # Content Security Policy
         contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
-    
+
     # Authelia forward authentication
     # Used by: navidrome, traefik dashboard
     authelia:
@@ -49,18 +49,18 @@ http:
         # Authelia redirects unauthenticated users here
         authResponseHeaders:
           - Authorization
-    
+
     # Rate limiting (optional; protects against brute force)
     rateLimitAuth:
       rateLimit:
         average: 10
         period: 60s
         burst: 20
-    
+
     # Compression
     compression:
       compress: true
-    
+
     # CORS (if needed for API clients)
     cors:
       allowedOrigins:

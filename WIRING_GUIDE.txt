@@ -135,7 +135,7 @@ traefik/dynamic.yml:
 authelia/configuration.yml:
   Find: domain: "example.com"
   Replace: domain: "YOUR_TOPLEVEL_DOMAIN"
-  
+
   Find: access_control rules with:
     domain: "auth.example.com"
     domain: "music.example.com"

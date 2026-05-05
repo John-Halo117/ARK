@@ -76,10 +76,10 @@ fi
 
 if [ -n "${REMOTE_BACKUP_URL:-}" ]; then
   log_info "Uploading to remote backup..."
-  
+
   # Example: S3 upload
   # aws s3 cp "$BACKUP_DIR/${BACKUP_PREFIX}.tar.gz" s3://my-bucket/backups/
-  
+
   log_pass "Remote backup uploaded (if configured)"
 fi
 

@@ -140,7 +140,7 @@ entryPoints:
         entrypoint:
           scheme: https
           permanent: true
-  
+
   websecure:
     address: ":443"
     http:
@@ -149,7 +149,7 @@ entryPoints:
         options: default
       middlewares:
         - securityHeaders@file
-  
+
   traefik:
     address: ":8080"
 
@@ -166,7 +166,7 @@ providers:
     endpoint: unix:///var/run/docker.sock
     exposedByDefault: false
     network: proxy
-  
+
   file:
     filename: /etc/traefik/dynamic.yml
     watch: true
@@ -228,7 +228,7 @@ http:
         framedeny: true
         referrerPolicy: "strict-origin-when-cross-origin"
         contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
-    
+
     authelia:
       forwardauth:
         address: http://authelia:9091/api/authz/forward-auth
@@ -240,19 +240,19 @@ http:
           - Remote-Email
         authResponseHeaders:
           - Authorization
-    
+
     rateLimitBrute:
       rateLimit:
         average: 5
         period: 60s
         burst: 10
-    
+
     rateLimitAPI:
       rateLimit:
         average: 100
         period: 60s
         burst: 200
-    
+
     compression:
       compress: true
 
@@ -365,16 +365,16 @@ access_control:
       path: "/api/health"
       policy: bypass
       methods: [GET]
-    
+
     - domain: "AUTH_DOMAIN_PLACEHOLDER"
       path: "/api/authz/forward-auth"
       policy: bypass
       methods: [GET, POST]
-    
+
     - domain: "MUSIC_DOMAIN_PLACEHOLDER"
       policy: one_factor
       methods: [GET, POST, PUT, DELETE, OPTIONS, HEAD]
-    
+
     - domain: "TRAEFIK_DOMAIN_PLACEHOLDER"
       policy: one_factor
       methods: [GET, POST]
@@ -411,7 +411,7 @@ log_info "\nSetting up Authelia users database..."
 if [ ! -f authelia/users_database.yml ]; then
   # Generate a default password hash (password: "authelia" - MUST be changed)
   DEFAULT_HASH='$2a$12$e3lGZ8XJwXArv8/VIu2R4edm5g1OikM2nSvR53PocUGyMAK8yToiK'
-  
+
   cat > authelia/users_database.yml << USERS_CONFIG
 users:
   admin:
@@ -423,7 +423,7 @@ users:
       - users
     totp: ""
 USERS_CONFIG
-  
+
   chmod 600 authelia/users_database.yml
   log_warn "users_database.yml created with default admin user"
   log_warn "  Username: admin"
@@ -557,7 +557,7 @@ services:
         reservations:
           cpus: '1'
           memory: 256M
-  
+
   authelia:
     deploy:
       resources:
@@ -567,7 +567,7 @@ services:
         reservations:
           cpus: '0.5'
           memory: 128M
-  
+
   redis:
     deploy:
       resources:
@@ -577,7 +577,7 @@ services:
         reservations:
           cpus: '0.5'
           memory: 128M
-  
+
   navidrome:
     deploy:
       resources:
@@ -587,7 +587,7 @@ services:
         reservations:
           cpus: '1'
           memory: 256M
-  
+
   home-assistant:
     deploy:
       resources:

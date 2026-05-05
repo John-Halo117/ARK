@@ -18,7 +18,7 @@ entryPoints:
           # Redirect all HTTP traffic to HTTPS
           scheme: https
           permanent: true
-  
+
   websecure:
     address: ":443"
     http:
@@ -41,19 +41,19 @@ certificateResolvers:
       # Production endpoint (for Let's Encrypt real certificates)
       # To use staging (test), override with environment variable in compose
       server: https://acme-v02.api.letsencrypt.org/directory
-      
+
       # Email for expiration notifications
       # HARDCODED: Change in .env and pass via docker-compose.yml
       # Currently: admin@example.com (must be updated)
       email: admin@example.com
-      
+
       # Storage file (must exist, mode 600)
       storage: /acme.json
-      
+
       # HTTP-01 challenge (no DNS API required)
       httpChallenge:
         entryPoint: web
-      
+
       # Optional: DNS-01 challenge (if using CloudFlare/Route53/etc.)
       # Uncomment and configure provider below
       # dnsChallenge:
@@ -71,7 +71,7 @@ providers:
     # Only containers with traefik.enable=true are exposed
     defaultRule: "Host(`{{ index .Labels \"traefik.http.routers.{{ .Name }}.rule\" }}`)"
     network: proxy  # Use specific network (not default bridge)
-  
+
   # File provider (dynamic config: middleware, TLS options)
   file:
     filename: /etc/traefik/dynamic.yml

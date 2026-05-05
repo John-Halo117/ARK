@@ -31,20 +31,20 @@ log_error() {
 # 1. Validate prerequisites
 validate_prerequisites() {
     log_info "Validating prerequisites..."
-    
+
     command -v docker &> /dev/null || { log_error "docker not found"; exit 1; }
     command -v docker-compose &> /dev/null || { log_error "docker-compose not found"; exit 1; }
     command -v git &> /dev/null || { log_error "git not found"; exit 1; }
-    
+
     log_info "✓ All prerequisites present"
 }
 
 # 2. Validate Dockerfiles
 validate_dockerfiles() {
     log_info "Validating Dockerfiles..."
-    
+
     local services=("gateway" "mesh" "autoscaler" "duckdb" "stability-kernel" "ingestion-leader" "ark")
-    
+
     for service in "${services[@]}"; do
         local dockerfile="Dockerfile.${service}"
         if [ ! -f "$dockerfile" ]; then
@@ -56,26 +56,26 @@ validate_dockerfiles() {
             exit 1
         }
     done
-    
+
     log_info "✓ All Dockerfiles valid"
 }
 
 # 3. Validate docker-compose
 validate_compose() {
     log_info "Validating docker-compose configuration..."
-    
+
     docker compose -f docker-compose.prod.yml config > /dev/null || {
         log_error "Invalid docker-compose.prod.yml"
         exit 1
     }
-    
+
     log_info "✓ docker-compose.prod.yml valid"
 }
 
 # 4. Run tests
 run_tests() {
     log_info "Running tests..."
-    
+
     python -m pytest tests/ -v --tb=short -x 2>/dev/null || {
         log_warn "Some tests failed (non-blocking)"
     }
@@ -84,9 +84,9 @@ run_tests() {
 # 5. Build images
 build_images() {
     log_info "Building Docker images for $VERSION..."
-    
+
     local services=("gateway" "mesh" "autoscaler" "duckdb" "stability-kernel" "ingestion-leader")
-    
+
     for service in "${services[@]}"; do
         log_info "Building ark-${service}:${VERSION}..."
         docker build \
@@ -101,17 +101,17 @@ build_images() {
             exit 1
         }
     done
-    
+
     log_info "✓ All images built"
 }
 
 # 6. Health checks on compose
 health_check() {
     log_info "Performing health checks..."
-    
+
     local max_attempts=30
     local attempt=0
-    
+
     while [ $attempt -lt $max_attempts ]; do
         if docker compose -f docker-compose.prod.yml ps | grep -q "healthy"; then
             log_info "✓ Core services healthy"
@@ -120,7 +120,7 @@ health_check() {
         attempt=$((attempt+1))
         sleep 2
     done
-    
+
     log_warn "Health checks did not complete within timeout"
     docker compose -f docker-compose.prod.yml ps
 }
@@ -128,14 +128,14 @@ health_check() {
 # 7. Forge callback registration
 register_forge_callbacks() {
     log_info "Registering Forge callback topics..."
-    
+
     cat <<EOF
 NATS Subjects (wired for Forge integration):
   ark.forge.plan              → Forge planner to ARK capability router
   ark.forge.result            → ARK to Forge result sink
   ark.call.forge.*            → Forge request topics (request/reply pattern)
   ark.reply.*                 → ARK reply topics (request/reply pattern)
-  
+
 Request/Reply Flow:
   1. Forge publishes to: ark.call.{service}.{capability}
   2. Service processes and replies to: ark.reply.{request_id}
@@ -146,7 +146,7 @@ Health Topics (monitored):
   ark.system.scale            → Autoscaling decisions
   ark.system.health           → Service health updates
 EOF
-    
+
     log_info "✓ Forge integration ready"
 }
 
@@ -178,7 +178,7 @@ deployment_summary() {
 main() {
     log_info "ARK Production Deployment v1.0"
     echo ""
-    
+
     validate_prerequisites
     validate_dockerfiles
     validate_compose
@@ -186,7 +186,7 @@ main() {
     build_images
     register_forge_callbacks
     deployment_summary
-    
+
     log_info "✓ Deployment ready"
 }
 

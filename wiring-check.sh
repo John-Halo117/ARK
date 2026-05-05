@@ -64,14 +64,14 @@ if [[ "$REDIS_PASSWORD" == *"CHANGE_ME"* ]] || [ -z "$REDIS_PASSWORD" ]; then
 else
   PASS_LEN=${#REDIS_PASSWORD}
   echo -e "${GREEN}✓ REDIS_PASSWORD set${NC} (${PASS_LEN} chars)"
-  
+
   # Check if in docker-compose.yml
   if grep -q "REDIS_PASSWORD:" docker-compose.yml && grep -q "AUTHELIA_LOG_LEVEL" docker-compose.yml; then
     echo -e "${GREEN}✓ REDIS_PASSWORD passed to authelia environment${NC}"
   else
     echo -e "${YELLOW}⚠ REDIS_PASSWORD may not be passed to authelia${NC}"
   fi
-  
+
   # Check if in authelia/configuration.yml
   if grep -q 'password: "${REDIS_PASSWORD}"' authelia/configuration.yml; then
     echo -e "${GREEN}✓ REDIS_PASSWORD used in authelia/configuration.yml${NC}"
@@ -91,14 +91,14 @@ if [[ "$AUTHELIA_TOTP_SECRET" == *"CHANGE_ME"* ]] || [ -z "$AUTHELIA_TOTP_SECRET
 else
   SECRET_LEN=${#AUTHELIA_TOTP_SECRET}
   echo -e "${GREEN}✓ AUTHELIA_TOTP_SECRET set${NC} (${SECRET_LEN} chars)"
-  
+
   # Check if in docker-compose.yml
   if grep -q "AUTHELIA_TOTP_SECRET:" docker-compose.yml; then
     echo -e "${GREEN}✓ AUTHELIA_TOTP_SECRET passed to authelia environment${NC}"
   else
     echo -e "${YELLOW}⚠ AUTHELIA_TOTP_SECRET may not be passed to authelia${NC}"
   fi
-  
+
   # Check if in authelia/configuration.yml
   if grep -q 'secret: "${AUTHELIA_TOTP_SECRET}"' authelia/configuration.yml; then
     echo -e "${GREEN}✓ AUTHELIA_TOTP_SECRET used in authelia/configuration.yml${NC}"
@@ -117,7 +117,7 @@ if [ -z "$MUSIC_PATH" ]; then
   FAILED=$((FAILED + 1))
 else
   echo -e "${GREEN}✓ MUSIC_PATH${NC}: $MUSIC_PATH"
-  
+
   if [ -d "$MUSIC_PATH" ]; then
     echo -e "${GREEN}✓ $MUSIC_PATH exists${NC}"
   else
@@ -131,7 +131,7 @@ if [ -z "$DATA_PATH" ]; then
   FAILED=$((FAILED + 1))
 else
   echo -e "${GREEN}✓ DATA_PATH${NC}: $DATA_PATH"
-  
+
   if [ -d "$DATA_PATH" ]; then
     echo -e "${GREEN}✓ $DATA_PATH exists${NC}"
   else

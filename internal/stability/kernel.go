@@ -117,15 +117,23 @@ func (k *Kernel) Evaluate(o Observation) Decision {
 	guardFreeze := math.Abs(o.DeltaG) > k.cfg.GMax || divergence != 0 || backpressureViolation
 	guardSigma := math.Abs(o.DeltaX) > k.cfg.SigmaK*math.Max(o.Sigma, 1e-9)
 	guardHysteretic := o.CNew+k.cfg.HysteresisLambda < o.COld
-	guardBoundedReaction := !(o.Alpha > 0 && o.Alpha < 1)
+	guardBoundedReaction := o.Alpha <= 0 || o.Alpha > k.cfg.AlphaMax
+	guardEntropy := entropyValue > k.cfg.EntropyGuard
 
 	recoveryTheta := o.RecoveryTheta + o.RecoveryLearningRate*o.RecoveryLossGradient
 
-	s2 := guardFreeze || entropyValue > k.cfg.EntropyGuard
+	freeze := guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction || guardEntropy
+	s2 := freeze
 	reason := ""
 	if guardFreeze {
 		reason = "hard_freeze"
-	} else if entropyValue > k.cfg.EntropyGuard {
+	} else if guardSigma {
+		reason = "sigma_filter"
+	} else if guardHysteretic {
+		reason = "hysteretic_switch"
+	} else if guardBoundedReaction {
+		reason = "bounded_reaction"
+	} else if guardEntropy {
 		reason = "entropy_guard"
 	}
 
@@ -160,7 +168,7 @@ func (k *Kernel) Evaluate(o Observation) Decision {
 	return Decision{
 		NextX:       nextX,
 		Metrics:     metrics,
-		Freeze:      guardFreeze || guardSigma || guardHysteretic || guardBoundedReaction,
+		Freeze:      freeze,
 		Reason:      reason,
 		S2Activated: s2,
 	}

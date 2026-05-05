@@ -124,12 +124,12 @@ MAX_WAIT=120
 while [ $WAIT_TIME -lt $MAX_WAIT ]; do
   HEALTHY=$(docker-compose ps --services --status running | wc -l)
   TOTAL=$(docker-compose config --services | wc -l)
-  
+
   if [ "$HEALTHY" -eq "$TOTAL" ]; then
     log_pass "All services running"
     break
   fi
-  
+
   sleep 5
   WAIT_TIME=$((WAIT_TIME + 5))
   echo -n "."
@@ -146,7 +146,7 @@ log_info "\nValidating service health..."
 UNHEALTHY=0
 for service in traefik redis authelia navidrome; do
   STATUS=$(docker-compose ps "$service" 2>/dev/null | grep "$service" | awk '{print $NF}' || echo "down")
-  
+
   if [[ "$STATUS" == *"healthy"* ]] || [[ "$STATUS" == *"(healthy)"* ]]; then
     log_pass "$service: healthy"
   elif [[ "$STATUS" == *"Up"* ]]; then

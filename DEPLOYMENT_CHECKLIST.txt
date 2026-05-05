@@ -1,6 +1,6 @@
 /**
  * PRODUCTION DOCKER COMPOSE STACK - CRITICAL CHECKLIST
- * 
+ *
  * Complete ALL items before docker compose up -d
  */
 

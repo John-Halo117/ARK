@@ -35,10 +35,14 @@ const (
 )
 
 type Service struct {
-	Redis  *transport.RedisClient
-	NATS   *transport.NATSClient
-	Kernel *stability.Kernel
-	Budget *budget.Controller
+	Redis     *transport.RedisClient
+	NATS      *transport.NATSClient
+	Kernel    *stability.Kernel
+	Budget    *budget.Controller
+	Source    CommitSource
+	Store     DedupeStore
+	Publisher EventPublisher
+	Stability StabilityEvaluator
 }
 
 type IngestRequest struct {
@@ -46,6 +50,40 @@ type IngestRequest struct {
 	CommitSHA  string            `json:"commit_sha"`
 	ParentCID  string            `json:"parent_cid,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
+}
+
+type CommitPayload struct {
+	RepoPath string `json:"repo_path"`
+	SHA      string `json:"sha"`
+	Author   string `json:"author"`
+	Date     string `json:"date"`
+	Message  string `json:"message"`
+	Diff     string `json:"diff"`
+}
+
+type DedupeRecord struct {
+	CID      string `json:"cid"`
+	Sequence uint64 `json:"sequence"`
+}
+
+type CommitSource interface {
+	Load(ctx context.Context, repoPath, commitSHA string) (CommitPayload, error)
+}
+
+type DedupeStore interface {
+	Reserve(stateHash string) (bool, error)
+	Get(stateHash string) (DedupeRecord, bool, bool, error)
+	Commit(stateHash string, rec DedupeRecord) error
+	Release(stateHash string) error
+	NextSequence() (uint64, error)
+}
+
+type EventPublisher interface {
+	Publish(payload []byte) error
+}
+
+type StabilityEvaluator interface {
+	Evaluate(stability.Observation) stability.Decision
 }
 
 type ingestCanonical struct {
@@ -70,6 +108,13 @@ type gitMeta struct {
 }
 
 func (s *Service) IngestGitCommit(ctx context.Context, req IngestRequest) (*models.Event, bool, error) {
+	if s.Source != nil || s.Store != nil || s.Publisher != nil || s.Stability != nil {
+		return s.ingestGitCommitWithInterfaces(ctx, req)
+	}
+	return s.ingestGitCommitLegacy(ctx, req)
+}
+
+func (s *Service) ingestGitCommitLegacy(ctx context.Context, req IngestRequest) (*models.Event, bool, error) {
 	if s.Redis == nil || s.NATS == nil || s.Kernel == nil {
 		return nil, false, errors.New("service dependencies are not initialized")
 	}
@@ -167,6 +212,127 @@ func (s *Service) IngestGitCommit(ctx context.Context, req IngestRequest) (*mode
 		return nil, false, fmt.Errorf("redis write dedupe: %w", err)
 	}
 
+	return &event, false, nil
+}
+
+func (s *Service) ingestGitCommitWithInterfaces(ctx context.Context, req IngestRequest) (*models.Event, bool, error) {
+	if s.Source == nil || s.Store == nil || s.Publisher == nil || s.Stability == nil {
+		return nil, false, errors.New("service dependencies are not initialized")
+	}
+
+	repoPath, err := validateRepoPath(req.RepoPath)
+	if err != nil {
+		return nil, false, err
+	}
+	if !isSafeCommitSHA(req.CommitSHA) {
+		return nil, false, errors.New("invalid commit sha")
+	}
+	attrs, err := validateAttributes(req.Attributes)
+	if err != nil {
+		return nil, false, err
+	}
+
+	payload, err := s.Source.Load(ctx, repoPath, req.CommitSHA)
+	if err != nil {
+		return nil, false, fmt.Errorf("load commit payload: %w", err)
+	}
+	if payload.RepoPath == "" {
+		payload.RepoPath = repoPath
+	}
+	if payload.SHA == "" {
+		payload.SHA = req.CommitSHA
+	}
+
+	canonicalObj := ingestCanonical{
+		RepoPath:  payload.RepoPath,
+		CommitSHA: payload.SHA,
+		Author:    payload.Author,
+		Date:      payload.Date,
+		Message:   normalizeText(payload.Message),
+		Diff:      normalizeText(payload.Diff),
+		Attrs:     attrs,
+	}
+	canonicalRaw, err := json.Marshal(canonicalObj)
+	if err != nil {
+		return nil, false, fmt.Errorf("marshal canonical: %w", err)
+	}
+	stateHash := sha256Hex(canonicalRaw)
+
+	if rec, found, pending, err := s.Store.Get(stateHash); err != nil {
+		return nil, false, fmt.Errorf("dedupe read: %w", err)
+	} else if pending {
+		return nil, false, errors.New("dedupe reservation in progress")
+	} else if found {
+		return &models.Event{
+			CID:        rec.CID,
+			Sequence:   rec.Sequence,
+			StateHash:  stateHash,
+			Repo:       payload.RepoPath,
+			CommitSHA:  payload.SHA,
+			Author:     payload.Author,
+			OccurredAt: mustParseTime(payload.Date),
+		}, true, nil
+	}
+
+	reserved, err := s.Store.Reserve(stateHash)
+	if err != nil {
+		return nil, false, fmt.Errorf("dedupe reserve: %w", err)
+	}
+	if !reserved {
+		return nil, false, errors.New("dedupe reservation in progress")
+	}
+	releaseOnFailure := true
+	defer func() {
+		if releaseOnFailure {
+			_ = s.Store.Release(stateHash)
+		}
+	}()
+
+	seq, err := s.Store.NextSequence()
+	if err != nil {
+		return nil, false, fmt.Errorf("sequence next: %w", err)
+	}
+	if s.Budget != nil && !s.Budget.AllowQueue(int(seq)) {
+		return nil, false, errors.New("queue budget exceeded")
+	}
+
+	decision := s.Stability.Evaluate(defaultObservation())
+	if decision.Freeze {
+		return nil, false, fmt.Errorf("stability rejected commit: %s", decision.Reason)
+	}
+
+	cid, err := eventCID(stateHash, seq, canonicalRaw)
+	if err != nil {
+		return nil, false, err
+	}
+	event := models.Event{
+		CID:         cid,
+		Sequence:    seq,
+		StateHash:   stateHash,
+		ParentCID:   req.ParentCID,
+		Repo:        payload.RepoPath,
+		CommitSHA:   payload.SHA,
+		Author:      payload.Author,
+		OccurredAt:  mustParseTime(payload.Date),
+		Canonical:   canonicalRaw,
+		Attributes:  attrs,
+		StabilityOK: true,
+	}
+	if err := contracts.ValidateEvent(event); err != nil {
+		return nil, false, fmt.Errorf("event contract validation failed: %w", err)
+	}
+	if err := s.Store.Commit(stateHash, DedupeRecord{CID: cid, Sequence: seq}); err != nil {
+		return nil, false, fmt.Errorf("dedupe commit: %w", err)
+	}
+	releaseOnFailure = false
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return nil, false, fmt.Errorf("marshal event: %w", err)
+	}
+	if err := s.Publisher.Publish(data); err != nil {
+		return nil, false, fmt.Errorf("publish event: %w", err)
+	}
 	return &event, false, nil
 }
 
