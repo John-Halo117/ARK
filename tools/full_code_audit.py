@@ -9,7 +9,7 @@ class F:path:str; line:int; severity:str; rule:str; message:str
 @dataclass(frozen=True)
 class S:path:str; reason:str
 def main():
- raw=subprocess.run(["git","ls-files","-z"],cwd=ROOT,check=True,stdout=subprocess.PIPE).stdout; fs=[x.decode("utf-8","surrogateescape") for x in raw.split(b"\0") if x]; finds=[]; skips=[]; nf=nl=0; conflict=re.compile(r"^(<{7}|={7}|>{7})(?:\s|$)")
+ head=subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(); raw=subprocess.run(["git","ls-files","-z"],cwd=ROOT,check=True,stdout=subprocess.PIPE).stdout; fs=[x.decode("utf-8","surrogateescape") for x in raw.split(b"\0") if x]; finds=[]; skips=[]; nf=nl=0; conflict=re.compile(r"^(<{7}|={7}|>{7})(?:\s|$)")
  for rel in fs:
   p=ROOT/rel
   if not p.exists() or p.is_dir(): skips.append(S(rel,"absent/gitlink/directory")); continue
@@ -33,5 +33,5 @@ def main():
      if isinstance(f,ast.Name) and f.id in {"eval","exec"}: finds.append(F(rel,n.lineno,"BLOCKER","DYNAMIC_EXEC",f.id))
      if isinstance(f,ast.Attribute) and isinstance(f.value,ast.Name) and f.value.id=="os" and f.attr=="system": finds.append(F(rel,n.lineno,"BLOCKER","OS_SYSTEM","os.system"))
      if isinstance(f,ast.Attribute) and f.attr in {"Popen","run","call","check_call","check_output"} and any(k.arg=="shell" and isinstance(k.value,ast.Constant) and k.value.value is True for k in n.keywords): finds.append(F(rel,n.lineno,"BLOCKER","SUBPROCESS_SHELL_TRUE","shell=True"))
- sev=Counter(x.severity for x in finds); rpt={"tracked_files":len(fs),"audited_text_files":nf,"audited_lines":nl,"skip_count":len(skips),"severity_counts":dict(sev),"skipped":[asdict(x) for x in skips],"findings":[asdict(x) for x in finds]}; OUT.mkdir(parents=True,exist_ok=True); (OUT/"full-code-audit.json").write_text(json.dumps(rpt,indent=2)+"\n"); print(json.dumps({k:rpt[k] for k in ("tracked_files","audited_text_files","audited_lines","skip_count","severity_counts")})); return 1 if sev.get("BLOCKER") else 0
+ sev=Counter(x.severity for x in finds); rpt={"schema_version":"1.1.0","audited_commit":head,"tracked_files":len(fs),"audited_text_files":nf,"audited_lines":nl,"skip_count":len(skips),"severity_counts":dict(sev),"skipped":[asdict(x) for x in skips],"findings":[asdict(x) for x in finds]}; OUT.mkdir(parents=True,exist_ok=True); (OUT/"full-code-audit.json").write_text(json.dumps(rpt,indent=2)+"\n"); print(json.dumps({k:rpt[k] for k in ("audited_commit","tracked_files","audited_text_files","audited_lines","skip_count","severity_counts")})); return 1 if sev.get("BLOCKER") else 0
 if __name__=="__main__": raise SystemExit(main())
