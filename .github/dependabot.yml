@@ -1,0 +1,58 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-root-routine:
+        update-types: [patch, minor]
+    labels: [dependencies]
+
+  - package-ecosystem: gomod
+    directory: /ark-core
+    schedule:
+      interval: weekly
+    groups:
+      go-core-routine:
+        update-types: [patch, minor]
+    labels: [dependencies]
+
+  - package-ecosystem: cargo
+    directory: /ark
+    schedule:
+      interval: weekly
+    groups:
+      rust-routine:
+        update-types: [patch, minor]
+    labels: [dependencies]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python-root-routine:
+        update-types: [patch, minor]
+    labels: [dependencies]
+
+  - package-ecosystem: pip
+    directory: /ark-core
+    schedule:
+      interval: weekly
+    groups:
+      python-core-routine:
+        update-types: [patch, minor]
+    labels: [dependencies]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: [dependencies]
