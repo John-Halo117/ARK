@@ -15,3 +15,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python tools/full_code_audit.py
+      - name: Verify production environment safety and shell syntax
+        run: python -m unittest -v tests.test_production_env_safety

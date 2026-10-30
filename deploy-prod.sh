@@ -35,16 +35,11 @@ if [ "$DEPLOY_ENV" != "staging" ] && [ "$DEPLOY_ENV" != "production" ]; then
   exit 1
 fi
 
-# Check .env exists
+# Production credentials must never originate from a tracked template.
+# init-prod.sh can create .env.example-derived placeholders for editing.
 if [ ! -f .env ]; then
-  log_warn ".env not found"
-  if [ -f .env.prod ]; then
-    log_info "Copying .env.prod to .env"
-    cp .env.prod .env
-  else
-    log_fail "No .env or .env.prod found"
-    exit 1
-  fi
+  log_fail ".env not found; create it privately from .env.example and configure required values"
+  exit 1
 fi
 
 source .env

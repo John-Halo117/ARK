@@ -75,7 +75,7 @@ for var in "${REQUIRED_VARS[@]}"; do
     log_fail "$var not set or contains CHANGE_ME"
     ISSUES=$((ISSUES + 1))
   else
-    log_pass "$var = ${val:0:30}..."
+    log_pass "$var configured (value withheld)"
   fi
 done
 
