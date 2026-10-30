@@ -408,32 +408,25 @@ log_pass "authelia/configuration.yml generated"
 
 log_info "\nSetting up Authelia users database..."
 
+# Authentication accounts must be configured privately before exposure.
+# The repository must never generate a known default admin login.
 if [ ! -f authelia/users_database.yml ]; then
-  # Generate a default password hash (password: "authelia" - MUST be changed)
-  DEFAULT_HASH='$2a$12$e3lGZ8XJwXArv8/VIu2R4edm5g1OikM2nSvR53PocUGyMAK8yToiK'
-
-  cat > authelia/users_database.yml << USERS_CONFIG
-users:
-  admin:
-    displayname: Administrator
-    password: "${DEFAULT_HASH}"
-    email: admin@${TOP_LEVEL_DOMAIN}
-    groups:
-      - admins
-      - users
-    totp: ""
-USERS_CONFIG
-
-  chmod 600 authelia/users_database.yml
-  log_warn "users_database.yml created with default admin user"
-  log_warn "  Username: admin"
-  log_warn "  Password: authelia (CHANGE IMMEDIATELY)"
-  log_warn "  Email: admin@${TOP_LEVEL_DOMAIN}"
-  log_warn "  To change: docker run --rm authelia/authelia:4.38.5 authelia hash-password"
-else
-  chmod 600 authelia/users_database.yml
-  log_pass "users_database.yml exists"
+  log_fail "Private Authelia user database is missing"
+  log_fail "Create authelia/users_database.yml privately from authelia/users_database.example.yml with a unique password hash"
+  exit 1
 fi
+if grep -Eq 'CHANGE_ME|ChangeMe123|REPLACE_WITH_' authelia/users_database.yml \
+   || grep -Fq 'e3lGZ8XJwXArv8/VIu2R4edm5g1OikM2nSvR53PocUGyMAK8yToiK' authelia/users_database.yml; then
+  log_fail "Authelia user database contains an example or known default credential"
+  exit 1
+fi
+if ! grep -Eq '^[[:space:]]*users:[[:space:]]*$' authelia/users_database.yml \
+   || ! grep -Eq '^[[:space:]]*password:[[:space:]]*[^[:space:]]+' authelia/users_database.yml; then
+  log_fail "Authelia user database lacks the expected user and password entries"
+  exit 1
+fi
+chmod 600 authelia/users_database.yml
+log_pass "Private Authelia user database present; known defaults rejected (hash and identity not independently validated)"
 
 ##############################################################################
 # 9. VALIDATE DNS
@@ -618,9 +611,9 @@ echo "  Data directory:        ${DATA_PATH}"
 echo "  Email (Let's Encrypt): ${LETSENCRYPT_EMAIL}"
 
 echo -e "\n${BLUE}Next Steps:${NC}"
-echo "  1. Verify .env is correct: cat .env"
-echo "  2. Add admin password: docker run --rm authelia/authelia:4.38.5 authelia hash-password"
-echo "  3. Update authelia/users_database.yml with admin password hash"
+echo "  1. Confirm private .env is configured without printing its secrets"
+echo "  2. Use private Authelia credentials with a unique password hash"
+echo "  3. Validate sign-in and second-factor settings before internet exposure"
 echo "  4. Deploy: docker compose up -d"
 echo "  5. Monitor: docker compose logs -f"
 
