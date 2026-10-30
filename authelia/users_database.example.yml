@@ -1,0 +1,12 @@
+# Non-functional schema example. Never deploy this file or commit actual hashes.
+# Create authelia/users_database.yml as a private, access-restricted file.
+# Replace every placeholder with a unique password hash and correct identity.
+# Password hashes can be generated through the supported Authelia CLI.
+users:
+  admin:
+    displayname: Administrator
+    password: "REPLACE_WITH_UNIQUE_PASSWORD_HASH"
+    email: "admin@example.invalid"
+    groups:
+      - admins
+      - users
