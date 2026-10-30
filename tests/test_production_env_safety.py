@@ -30,6 +30,28 @@ class ProductionEnvironmentSafetyTests(unittest.TestCase):
         self.assertIn('if [ ! -f .env ]; then', source)
         self.assertIn("create it privately from .env.example", source)
 
+    def test_authelia_identity_database_is_private(self):
+        self.assertFalse((ROOT / "authelia/users_database.yml").exists())
+        example = ROOT / "authelia/users_database.example.yml"
+        self.assertTrue(example.is_file())
+        self.assertIn("REPLACE_WITH_UNIQUE_PASSWORD_HASH", example.read_text(encoding="utf-8"))
+        ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        self.assertIn("authelia/users_database.yml", ignored)
+
+    def test_init_rejects_missing_or_default_identity(self):
+        source = (ROOT / "init-prod.sh").read_text(encoding="utf-8")
+        self.assertIn("Private Authelia user database is missing", source)
+        self.assertIn("example or known default credential", source)
+        self.assertIn("chmod 600 authelia/users_database.yml", source)
+        self.assertNotIn("DEFAULT_HASH=", source)
+        self.assertNotIn("cat > authelia/users_database.yml", source)
+
+    def test_deploy_does_not_advertise_default_credentials(self):
+        source = (ROOT / "deploy-prod.sh").read_text(encoding="utf-8")
+        self.assertNotIn("Default Credentials:", source)
+        self.assertNotIn("Password:       authelia", source)
+        self.assertIn("private authelia/users_database.yml", source)
+
     def test_deployment_shell_syntax(self):
         for script in ("init-prod.sh", "deploy-prod.sh"):
             with self.subTest(script=script):
