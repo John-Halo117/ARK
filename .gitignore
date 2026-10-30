@@ -27,3 +27,6 @@ env/
 ENV/
 ark-ssot-mvp/infra/runtime/
 ark-ssot-mvp/apps/runtime/
+
+# Private authentication identities and password hashes
+authelia/users_database.yml
