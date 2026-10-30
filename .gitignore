@@ -1,6 +1,7 @@
 .git/
 .env
 .env.local
+.env.prod
 .env.*.local
 *.pyc
 __pycache__/
